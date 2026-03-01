@@ -9,10 +9,6 @@
     "clipboardWrite",
     "storage"
   ],
-  "host_permissions": [
-    "*://x.com/*",
-    "*://twitter.com/*"
-  ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
