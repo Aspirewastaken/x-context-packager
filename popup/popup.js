@@ -327,6 +327,7 @@
         page: payload?.meta?.page || 1,
         tool: payload?.meta?.tool || 'X Context Packager v1.0.0 by AdLab',
       },
+      parentContext: [],
       mainPost: payload?.mainPost || null,
       replies: [],
       profile: payload?.profile || null,
@@ -340,6 +341,7 @@
     };
 
     if (pageType === 'post') {
+      model.parentContext = Array.isArray(payload?.parentContext) ? payload.parentContext : [];
       const replies = Array.isArray(payload?.replies) ? payload.replies : [];
       if (options.maxReplies !== 'all') {
         const cap = Number.parseInt(options.maxReplies, 10);
@@ -352,7 +354,7 @@
     }
 
     const postTweets = pageType === 'post'
-      ? [model.mainPost, ...model.replies].filter(Boolean)
+      ? [...model.parentContext, model.mainPost, ...model.replies].filter(Boolean)
       : model.posts.slice();
 
     const hashtagMap = {};
@@ -360,9 +362,19 @@
     const domainMap = {};
 
     postTweets.forEach((tweet, i) => {
-      const context = pageType === 'post'
-        ? (i === 0 ? 'main post' : `reply ${i}`)
-        : `post ${i + 1}`;
+      let context;
+      if (pageType === 'post') {
+        const parentCount = model.parentContext.length;
+        if (i < parentCount) {
+          context = `parent context ${i + 1}`;
+        } else if (i === parentCount) {
+          context = 'main post';
+        } else {
+          context = `reply ${i - parentCount}`;
+        }
+      } else {
+        context = `post ${i + 1}`;
+      }
 
       for (const tag of (tweet.hashtags || [])) {
         if (!hashtagMap[tag]) hashtagMap[tag] = { count: 0, tweets: [] };
@@ -578,6 +590,15 @@
     lines.push('');
 
     if (model.meta.pageType === 'post') {
+      if (model.parentContext.length > 0) {
+        lines.push(`<parent_context count="${model.parentContext.length}">`);
+        model.parentContext.forEach((parent, i) => {
+          lines.push(formatStructuredTweet(parent, 'parent', options, xmlAttr('index', i + 1)));
+        });
+        lines.push('</parent_context>');
+        lines.push('');
+      }
+
       if (model.mainPost) {
         lines.push(formatStructuredTweet(model.mainPost, 'main_post', options));
         lines.push('');
@@ -801,6 +822,18 @@
     lines.push('');
 
     if (model.meta.pageType === 'post') {
+      if (model.parentContext.length > 0) {
+        lines.push(`## THREAD CONTEXT (${model.parentContext.length})`);
+        lines.push('');
+        model.parentContext.forEach((parent, i) => {
+          lines.push(`### Parent ${i + 1}`);
+          lines.push(formatMarkdownTweet(parent, options));
+          lines.push('');
+        });
+        lines.push('---');
+        lines.push('');
+      }
+
       if (model.mainPost) {
         lines.push('## MAIN POST');
         lines.push(formatMarkdownTweet(model.mainPost, options));
@@ -947,6 +980,17 @@
     lines.push('---');
 
     if (model.meta.pageType === 'post') {
+      if (model.parentContext.length > 0) {
+        lines.push(`THREAD CONTEXT (${model.parentContext.length})`);
+        lines.push('');
+        model.parentContext.forEach((parent, i) => {
+          lines.push(`Parent ${i + 1}:`);
+          lines.push(formatPlainTweet(parent, options));
+          lines.push('');
+        });
+        lines.push('---');
+      }
+
       if (model.mainPost) {
         lines.push('MAIN POST');
         lines.push(formatPlainTweet(model.mainPost, options));

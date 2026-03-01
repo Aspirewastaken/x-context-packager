@@ -32,6 +32,10 @@ describe('Utility Functions Logic', () => {
       expect(parseEngagementLogic('1.2M views')).toBe('1.2M');
     });
 
+    test('parses multi-clause aria-labels from the leading metric', () => {
+      expect(parseEngagementLogic('10.2K reposts, including 2 quote posts')).toBe('10.2K');
+    });
+
     test('falls back to span text content', () => {
       expect(parseEngagementLogic('', '1.5K')).toBe('1.5K');
     });
@@ -53,6 +57,42 @@ describe('Utility Functions Logic', () => {
       expect(estimateTokensLogic('')).toBe(0);
       expect(estimateTokensLogic(null)).toBe(0);
       expect(estimateTokensLogic('a')).toBe(1); // 1 char / 4 = 0.25 → 1
+    });
+  });
+
+  describe('parseMetricValue logic', () => {
+    function parseMetricValueLogic(raw) {
+      if (raw === null || raw === undefined) return -1;
+      const text = String(raw).trim().toUpperCase().replace(/,/g, '');
+      if (!text) return -1;
+      const match = text.match(/^(\d+(?:\.\d+)?)([KMB])?$/);
+      if (!match) {
+        const numeric = Number.parseFloat(text);
+        return Number.isFinite(numeric) ? numeric : -1;
+      }
+      const value = Number.parseFloat(match[1]);
+      const suffix = match[2];
+      if (suffix === 'K') return value * 1000;
+      if (suffix === 'M') return value * 1000000;
+      if (suffix === 'B') return value * 1000000000;
+      return value;
+    }
+
+    test('parses abbreviated values', () => {
+      expect(parseMetricValueLogic('2.5K')).toBe(2500);
+      expect(parseMetricValueLogic('1.2M')).toBe(1200000);
+      expect(parseMetricValueLogic('4.3B')).toBe(4300000000);
+    });
+
+    test('parses comma separated and zero values', () => {
+      expect(parseMetricValueLogic('1,234')).toBe(1234);
+      expect(parseMetricValueLogic('0')).toBe(0);
+    });
+
+    test('handles nullish and invalid inputs', () => {
+      expect(parseMetricValueLogic(null)).toBe(-1);
+      expect(parseMetricValueLogic('')).toBe(-1);
+      expect(parseMetricValueLogic('n/a')).toBe(-1);
     });
   });
 
@@ -154,6 +194,24 @@ describe('Utility Functions Logic', () => {
     test('handles edge cases', () => {
       expect(detectPageTypeLogic('')).toBe('unsupported');
       expect(detectPageTypeLogic(null)).toBe('unsupported');
+    });
+  });
+
+  describe('status ID matching logic', () => {
+    function matchesStatusHref(href, statusId) {
+      const statusPathPattern = new RegExp(`/status/${statusId}(?:[/?#]|$)`);
+      return statusPathPattern.test(href || '');
+    }
+
+    test('matches exact status IDs', () => {
+      expect(matchesStatusHref('/user/status/12345', '12345')).toBe(true);
+      expect(matchesStatusHref('/user/status/12345/photo/1', '12345')).toBe(true);
+      expect(matchesStatusHref('/user/status/12345?ref=abc', '12345')).toBe(true);
+    });
+
+    test('rejects substring false positives', () => {
+      expect(matchesStatusHref('/user/status/123456', '12345')).toBe(false);
+      expect(matchesStatusHref('/user/status/912345', '12345')).toBe(false);
     });
   });
 
