@@ -49,15 +49,19 @@
 
     // Threading
     showMore: '[data-testid="tweet-text-show-more-link"]',
+    sensitiveWarning: '[data-testid="tweet-text-sensitive-warning"]',
+    cellInnerDiv: '[data-testid="cellInnerDiv"]',
 
     // Profile
     profileHeader: '[data-testid="UserProfileHeader_Items"]',
     profileBio: '[data-testid="UserDescription"]',
     profileName: '[data-testid="UserName"]',
     hoverCard: '[data-testid="HoverCard"]',
+    profileFollowLinks: 'a[href$="/following"], a[href$="/followers"], a[href$="/verified_followers"]',
 
     // Navigation
     primaryColumn: '[data-testid="primaryColumn"]',
+    analyticsLink: 'a[href*="/analytics"]',
 
     // Time
     timestamp: 'time',
@@ -186,7 +190,7 @@
       poll: null,
       engagement: { replies: null, retweets: null, quotes: null, likes: null, bookmarks: null, views: null },
       replyRestriction: null,
-      flags: { sensitive: false, translated: false, truncated: false, repost: false },
+      flags: { sensitive: false, translated: false, truncated: false, repost: false, hasCommunityNote: false },
       threading: { replyTo: null, depth: context.depth || 0, isOp: context.isOp || false, position: context.position || 0 },
     };
 
@@ -381,7 +385,7 @@
       tweet.engagement.bookmarks = parseEngagement(bookmarkBtn);
 
       // Views - look for view count container (usually on main post)
-      const viewEls = qsa(tweetEl, 'a[href*="/analytics"]');
+      const viewEls = qsa(tweetEl, SELECTORS.analyticsLink);
       if (viewEls.length > 0) {
         const viewText = viewEls[0].textContent?.trim();
         if (viewText) {
@@ -391,7 +395,7 @@
       }
 
       // --- SENSITIVE ---
-      if (qs(tweetEl, '[data-testid="tweet-text-sensitive-warning"]')) {
+      if (qs(tweetEl, SELECTORS.sensitiveWarning)) {
         tweet.flags.sensitive = true;
       }
 
@@ -528,137 +532,145 @@
    * Extract post page: main tweet + all visible replies
    */
   function extractPostPage() {
-    const tweetEls = qsa(document, SELECTORS.tweet);
-    if (tweetEls.length === 0) {
-      return { error: 'No tweets found on this page' };
-    }
+    try {
+      const tweetEls = qsa(document, SELECTORS.tweet);
+      if (tweetEls.length === 0) {
+        return { error: 'No tweets found on this page' };
+      }
 
-    // First tweet is the main post
-    const mainPost = extractTweet(tweetEls[0], { depth: 0, position: 0, isOp: false });
-    const opHandle = mainPost.author.handle;
+      // First tweet is the main post
+      const mainPost = extractTweet(tweetEls[0], { depth: 0, position: 0, isOp: false });
+      const opHandle = mainPost.author.handle;
 
-    // Remaining are replies
-    const replies = [];
-    for (let i = 1; i < tweetEls.length; i++) {
-      const el = tweetEls[i];
+      // Remaining are replies
+      const replies = [];
+      for (let i = 1; i < tweetEls.length; i++) {
+        const el = tweetEls[i];
 
-      // Calculate depth from DOM structure
-      let depth = 1;
-      // Look for indentation clues — thread connectors, nested reply containers
-      const parentArticle = el.closest('article');
-      if (parentArticle) {
-        // Count ancestor cellInnerDiv elements as proxy for nesting
-        let parent = el.parentElement;
-        let nestLevel = 0;
-        while (parent && parent !== document.body) {
-          if (parent.getAttribute('data-testid') === 'cellInnerDiv') nestLevel++;
-          parent = parent.parentElement;
+        // Calculate depth from DOM structure
+        let depth = 1;
+        // Look for indentation clues — thread connectors, nested reply containers
+        const parentArticle = el.closest('article');
+        if (parentArticle) {
+          // Count ancestor cellInnerDiv elements as proxy for nesting
+          let parent = el.parentElement;
+          let nestLevel = 0;
+          while (parent && parent !== document.body) {
+            if (parent.matches?.(SELECTORS.cellInnerDiv)) nestLevel++;
+            parent = parent.parentElement;
+          }
+          // Heuristic: more nesting = deeper thread
+          if (nestLevel > 3) depth = 2;
+          if (nestLevel > 5) depth = 3;
         }
-        // Heuristic: more nesting = deeper thread
-        if (nestLevel > 3) depth = 2;
-        if (nestLevel > 5) depth = 3;
+
+        // Check if reply mentions someone (reply-to context)
+        const reply = extractTweet(el, {
+          depth: depth,
+          position: i,
+          isOp: opHandle && qs(el, SELECTORS.userName)?.textContent?.includes(opHandle?.replace('@', ''))
+        });
+
+        // Override isOp based on handle comparison
+        if (opHandle && reply.author.handle) {
+          reply.threading.isOp = reply.author.handle.toLowerCase() === opHandle.toLowerCase();
+        }
+
+        replies.push(reply);
       }
 
-      // Check if reply mentions someone (reply-to context)
-      const reply = extractTweet(el, {
-        depth: depth,
-        position: i,
-        isOp: opHandle && el.querySelector(SELECTORS.userName)?.textContent?.includes(opHandle?.replace('@', ''))
-      });
-
-      // Override isOp based on handle comparison
-      if (opHandle && reply.author.handle) {
-        reply.threading.isOp = reply.author.handle.toLowerCase() === opHandle.toLowerCase();
+      // Detect reply sort mode
+      let replySortMode = 'relevance';
+      const activeTab = qs(document, SELECTORS.replySortTab);
+      if (activeTab) {
+        const tabText = (activeTab.textContent || '').toLowerCase();
+        if (tabText.includes('recent') || tabText.includes('latest')) {
+          replySortMode = 'recency';
+        }
       }
 
-      replies.push(reply);
+      return { mainPost, replies, replySortMode };
+    } catch {
+      return { error: 'Failed to extract post context from the current page' };
     }
-
-    // Detect reply sort mode
-    let replySortMode = 'relevance';
-    const activeTab = qs(document, SELECTORS.replySortTab);
-    if (activeTab) {
-      const tabText = (activeTab.textContent || '').toLowerCase();
-      if (tabText.includes('recent') || tabText.includes('latest')) {
-        replySortMode = 'recency';
-      }
-    }
-
-    return { mainPost, replies, replySortMode };
   }
 
   /**
    * Extract profile page: profile header + visible timeline posts
    */
   function extractProfilePage() {
-    const profile = {
-      name: null,
-      handle: null,
-      bio: null,
-      location: null,
-      website: null,
-      joined: null,
-      following: null,
-      followers: null,
-    };
+    try {
+      const profile = {
+        name: null,
+        handle: null,
+        bio: null,
+        location: null,
+        website: null,
+        joined: null,
+        following: null,
+        followers: null,
+      };
 
-    // Profile name
-    const nameEl = qs(document, SELECTORS.profileName);
-    if (nameEl) {
-      const spans = qsa(nameEl, 'span');
-      for (const span of spans) {
-        const t = span.textContent?.trim();
-        if (t && t.startsWith('@')) {
-          profile.handle = t;
-        } else if (t && !profile.name && t.length > 0) {
-          profile.name = t;
+      // Profile name
+      const nameEl = qs(document, SELECTORS.profileName);
+      if (nameEl) {
+        const spans = qsa(nameEl, 'span');
+        for (const span of spans) {
+          const t = span.textContent?.trim();
+          if (t && t.startsWith('@')) {
+            profile.handle = t;
+          } else if (t && !profile.name && t.length > 0) {
+            profile.name = t;
+          }
         }
       }
-    }
 
-    // Bio
-    const bioEl = qs(document, SELECTORS.profileBio);
-    if (bioEl) {
-      profile.bio = textOf(bioEl);
-    }
+      // Bio
+      const bioEl = qs(document, SELECTORS.profileBio);
+      if (bioEl) {
+        profile.bio = textOf(bioEl) || null;
+      }
 
-    // Header items (location, website, joined date)
-    const headerEl = qs(document, SELECTORS.profileHeader);
-    if (headerEl) {
-      const items = qsa(headerEl, 'span');
-      for (const item of items) {
-        const text = item.textContent?.trim() || '';
-        if (text.startsWith('Joined')) {
-          profile.joined = text;
-        } else if (text.includes('.') && text.length < 40 && !text.includes('Joined')) {
-          profile.website = text;
-        } else if (text.length > 0 && text.length < 50 && !text.includes('Joined') && !text.includes('Born')) {
-          if (!profile.location) profile.location = text;
+      // Header items (location, website, joined date)
+      const headerEl = qs(document, SELECTORS.profileHeader);
+      if (headerEl) {
+        const items = qsa(headerEl, 'span');
+        for (const item of items) {
+          const text = item.textContent?.trim() || '';
+          if (text.startsWith('Joined')) {
+            profile.joined = text;
+          } else if (text.includes('.') && text.length < 40 && !text.includes('Joined')) {
+            profile.website = text;
+          } else if (text.length > 0 && text.length < 50 && !text.includes('Joined') && !text.includes('Born')) {
+            if (!profile.location) profile.location = text;
+          }
         }
       }
-    }
 
-    // Follower/following counts
-    const followLinks = qsa(document, 'a[href$="/following"], a[href$="/followers"], a[href$="/verified_followers"]');
-    for (const link of followLinks) {
-      const href = link.getAttribute('href') || '';
-      const countSpan = qs(link, 'span span');
-      const count = countSpan ? countSpan.textContent?.trim() : null;
-      if (href.includes('/following') && !href.includes('/followers')) {
-        profile.following = count;
-      } else if (href.includes('/followers') || href.includes('/verified_followers')) {
-        profile.followers = count;
+      // Follower/following counts
+      const followLinks = qsa(document, SELECTORS.profileFollowLinks);
+      for (const link of followLinks) {
+        const href = link.getAttribute('href') || '';
+        const countSpan = qs(link, 'span span');
+        const count = countSpan ? countSpan.textContent?.trim() : null;
+        if (href.includes('/following') && !href.includes('/followers')) {
+          profile.following = count;
+        } else if (href.includes('/followers') || href.includes('/verified_followers')) {
+          profile.followers = count;
+        }
       }
-    }
 
-    // Timeline posts
-    const tweetEls = qsa(document, SELECTORS.tweet);
-    const posts = [];
-    for (let i = 0; i < tweetEls.length; i++) {
-      posts.push(extractTweet(tweetEls[i], { depth: 0, position: i + 1, isOp: false }));
-    }
+      // Timeline posts
+      const tweetEls = qsa(document, SELECTORS.tweet);
+      const posts = [];
+      for (let i = 0; i < tweetEls.length; i++) {
+        posts.push(extractTweet(tweetEls[i], { depth: 0, position: i + 1, isOp: false }));
+      }
 
-    return { profile, posts };
+      return { profile, posts };
+    } catch {
+      return { error: 'Failed to extract profile context from the current page' };
+    }
   }
 
   // =========================================================================
@@ -833,14 +845,19 @@
    * Escape XML special characters
    */
   function escXml(str) {
-    if (!str) return '';
+    if (str === null || str === undefined) return '';
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function xmlAttr(name, value) {
+    if (value === null || value === undefined || value === '') return '';
+    return ` ${name}="${escXml(value)}"`;
   }
 
   /**
    * Format a single tweet for structured XML output
    */
-  function formatTweetStructured(tweet, tag, attrs = '') {
+  function formatTweetStructured(tweet, tag, attrs = '', options = {}) {
     const lines = [];
     const indent = tag === 'main_post' ? '  ' : '    ';
 
@@ -848,14 +865,12 @@
 
     // Author
     const a = tweet.author;
-    let authorAttrs = `name="${escXml(a.name)}" handle="${escXml(a.handle)}" verified="${a.verified}"`;
-    if (a.followers) authorAttrs += ` followers="${escXml(a.followers)}"`;
-    if (a.following) authorAttrs += ` following="${escXml(a.following)}"`;
-    lines.push(`${indent}<author ${authorAttrs}/>`);
+    const authorAttrs = `${xmlAttr('name', a.name)}${xmlAttr('handle', a.handle)}${xmlAttr('verified', a.verified || 'none')}${xmlAttr('followers', a.followers)}${xmlAttr('following', a.following)}`;
+    lines.push(`${indent}<author${authorAttrs}/>`);
 
     // Timestamp
-    if (tweet.timestamp.iso || tweet.timestamp.display) {
-      lines.push(`${indent}<timestamp iso="${escXml(tweet.timestamp.iso)}" display="${escXml(tweet.timestamp.display)}"/>`);
+    if (options.includeTimestamps !== false && (tweet.timestamp.iso || tweet.timestamp.display)) {
+      lines.push(`${indent}<timestamp${xmlAttr('iso', tweet.timestamp.iso)}${xmlAttr('display', tweet.timestamp.display)}/>`);
     }
 
     // Text
@@ -874,18 +889,16 @@
     if (tweet.links.length > 0) {
       lines.push(`${indent}<links>`);
       for (const l of tweet.links) {
-        lines.push(`${indent}  <link url="${escXml(l.url)}" display="${escXml(l.display)}"/>`);
+        lines.push(`${indent}  <link${xmlAttr('url', l.url)}${xmlAttr('display', l.display)}/>`);
       }
       lines.push(`${indent}</links>`);
     }
 
     // Images
-    if (tweet.images.length > 0) {
+    if (options.includeImages !== false && tweet.images.length > 0) {
       lines.push(`${indent}<images>`);
       for (const img of tweet.images) {
-        let imgAttrs = `url="${escXml(img.url)}"`;
-        if (img.alt) imgAttrs += ` alt="${escXml(img.alt)}"`;
-        lines.push(`${indent}  <image ${imgAttrs}/>`);
+        lines.push(`${indent}  <image${xmlAttr('url', img.url)}${xmlAttr('alt', img.alt)}/>`);
       }
       lines.push(`${indent}</images>`);
     }
@@ -898,7 +911,7 @@
     if (tweet.poll) {
       lines.push(`${indent}<poll>`);
       for (const opt of tweet.poll.options) {
-        lines.push(`${indent}  <option votes="${escXml(opt.votes)}">${escXml(opt.label)}</option>`);
+        lines.push(`${indent}  <option${xmlAttr('votes', opt.votes)}>${escXml(opt.label)}</option>`);
       }
       if (tweet.poll.totalVotes) lines.push(`${indent}  <total_votes>${escXml(tweet.poll.totalVotes)}</total_votes>`);
       lines.push(`${indent}</poll>`);
@@ -908,11 +921,11 @@
     if (tweet.quotedTweet) {
       const qt = tweet.quotedTweet;
       lines.push(`${indent}<quoted_tweet>`);
-      lines.push(`${indent}  <author name="${escXml(qt.author.name)}" handle="${escXml(qt.author.handle)}" verified="${qt.author.verified}"/>`);
+      lines.push(`${indent}  <author${xmlAttr('name', qt.author.name)}${xmlAttr('handle', qt.author.handle)}${xmlAttr('verified', qt.author.verified || 'none')}/>`);
       if (qt.text) lines.push(`${indent}  <text>${escXml(qt.text)}</text>`);
       if (qt.links.length > 0) {
         lines.push(`${indent}  <links>`);
-        for (const l of qt.links) lines.push(`${indent}    <link url="${escXml(l.url)}" display="${escXml(l.display)}"/>`);
+        for (const l of qt.links) lines.push(`${indent}    <link${xmlAttr('url', l.url)}${xmlAttr('display', l.display)}/>`);
         lines.push(`${indent}  </links>`);
       }
       lines.push(`${indent}</quoted_tweet>`);
@@ -921,7 +934,7 @@
     // Link card
     if (tweet.linkCard) {
       const c = tweet.linkCard;
-      lines.push(`${indent}<link_card domain="${escXml(c.domain)}" title="${escXml(c.title)}" description="${escXml(c.description)}" url="${escXml(c.url)}"/>`);
+      lines.push(`${indent}<link_card${xmlAttr('domain', c.domain)}${xmlAttr('title', c.title)}${xmlAttr('description', c.description)}${xmlAttr('url', c.url)}/>`);
     }
 
     // Community note
@@ -930,15 +943,11 @@
     }
 
     // Engagement
-    const e = tweet.engagement;
-    let engAttrs = '';
-    if (e.replies) engAttrs += ` replies="${escXml(e.replies)}"`;
-    if (e.retweets) engAttrs += ` retweets="${escXml(e.retweets)}"`;
-    if (e.quotes) engAttrs += ` quotes="${escXml(e.quotes)}"`;
-    if (e.likes) engAttrs += ` likes="${escXml(e.likes)}"`;
-    if (e.bookmarks) engAttrs += ` bookmarks="${escXml(e.bookmarks)}"`;
-    if (e.views) engAttrs += ` views="${escXml(e.views)}"`;
-    if (engAttrs) lines.push(`${indent}<engagement${engAttrs}/>`);
+    if (options.includeEngagement !== false) {
+      const e = tweet.engagement;
+      const engAttrs = `${xmlAttr('replies', e.replies)}${xmlAttr('retweets', e.retweets)}${xmlAttr('quotes', e.quotes)}${xmlAttr('likes', e.likes)}${xmlAttr('bookmarks', e.bookmarks)}${xmlAttr('views', e.views)}`;
+      if (engAttrs) lines.push(`${indent}<engagement${engAttrs}/>`);
+    }
 
     // Flags
     const f = tweet.flags;
@@ -975,7 +984,7 @@
     if (payload.meta.pageType === 'post') {
       // Main post
       if (payload.mainPost) {
-        lines.push(formatTweetStructured(payload.mainPost, 'main_post'));
+        lines.push(formatTweetStructured(payload.mainPost, 'main_post', '', options));
         lines.push('');
       }
 
@@ -984,8 +993,8 @@
         lines.push(`<replies count="${payload.replies.length}">`);
         for (let i = 0; i < payload.replies.length; i++) {
           const r = payload.replies[i];
-          const attrs = ` index="${i + 1}" depth="${r.threading.depth}" reply_to="${escXml(r.threading.replyTo || '')}" is_op="${r.threading.isOp}"`;
-          lines.push(formatTweetStructured(r, 'reply', attrs));
+          const attrs = `${xmlAttr('index', i + 1)}${xmlAttr('depth', r.threading.depth)}${xmlAttr('reply_to', r.threading.replyTo)}${xmlAttr('is_op', r.threading.isOp)}`;
+          lines.push(formatTweetStructured(r, 'reply', attrs, options));
         }
         lines.push('</replies>');
         lines.push('');
@@ -996,8 +1005,8 @@
       if (payload.profile) {
         const p = payload.profile;
         lines.push('<profile>');
-        lines.push(`  <name>${escXml(p.name)}</name>`);
-        lines.push(`  <handle>${escXml(p.handle)}</handle>`);
+        if (p.name !== null && p.name !== undefined) lines.push(`  <name>${escXml(p.name)}</name>`);
+        if (p.handle !== null && p.handle !== undefined) lines.push(`  <handle>${escXml(p.handle)}</handle>`);
         if (p.bio) lines.push(`  <bio>${escXml(p.bio)}</bio>`);
         if (p.location) lines.push(`  <location>${escXml(p.location)}</location>`);
         if (p.website) lines.push(`  <website>${escXml(p.website)}</website>`);
@@ -1012,7 +1021,7 @@
       if (payload.posts.length > 0) {
         lines.push(`<posts count="${payload.posts.length}">`);
         for (let i = 0; i < payload.posts.length; i++) {
-          lines.push(formatTweetStructured(payload.posts[i], 'post', ` index="${i + 1}"`));
+          lines.push(formatTweetStructured(payload.posts[i], 'post', `${xmlAttr('index', i + 1)}`, options));
         }
         lines.push('</posts>');
         lines.push('');
@@ -1020,7 +1029,7 @@
     }
 
     // All links
-    if (payload.allLinks.length > 0 && options.includeImages !== false) {
+    if (payload.allLinks.length > 0) {
       lines.push('<all_links>');
       for (const l of payload.allLinks) {
         lines.push(`  <link index="${l.index}" url="${escXml(l.url)}" context="${escXml(l.context)}"/>`);
@@ -1096,8 +1105,11 @@
   function formatTweetMarkdown(tweet, prefix = '', options = {}) {
     const lines = [];
     const v = tweet.author.verified !== 'none' ? ` · ✓ ${tweet.author.verified}` : '';
+    const displayName = tweet.author.name ?? 'null';
+    const handle = tweet.author.handle ?? 'null';
+    const timestamp = options.includeTimestamps !== false ? ` · ${tweet.timestamp.display ?? 'null'}` : '';
 
-    lines.push(`${prefix}**${tweet.author.name || 'Unknown'}** (${tweet.author.handle || '?'})${v} · ${tweet.timestamp.display || '?'}`);
+    lines.push(`${prefix}**${displayName}** (${handle})${v}${timestamp}`);
 
     if (tweet.threading.replyTo) {
       lines.push(`${prefix}> Replying to ${tweet.threading.replyTo}`);
@@ -1110,7 +1122,7 @@
 
     if (tweet.quotedTweet) {
       lines.push('');
-      lines.push(`> **Quoted:** ${tweet.quotedTweet.author.handle || '?'} — ${tweet.quotedTweet.text || ''}`);
+      lines.push(`> **Quoted:** ${tweet.quotedTweet.author.handle ?? 'null'} — ${tweet.quotedTweet.text ?? 'null'}`);
     }
 
     if (tweet.linkCard) {
@@ -1136,7 +1148,7 @@
     if (tweet.poll) {
       lines.push('📊 Poll:');
       for (const opt of tweet.poll.options) {
-        lines.push(`  - ${opt.label}: ${opt.votes || '?'}`);
+        lines.push(`  - ${opt.label}: ${opt.votes ?? 'null'}`);
       }
     }
 
@@ -1184,7 +1196,8 @@
           const r = payload.replies[i];
           const depthStr = r.threading.depth > 1 ? ` [depth: ${r.threading.depth}]` : '';
           const opStr = r.threading.isOp ? ' (OP)' : '';
-          lines.push(`### ${i + 1}. ${r.author.handle || '?'}${opStr} · ${r.timestamp.display || '?'}${depthStr}`);
+          const timeLabel = options.includeTimestamps !== false ? ` · ${r.timestamp.display ?? 'null'}` : '';
+          lines.push(`### ${i + 1}. ${r.author.handle ?? 'null'}${opStr}${timeLabel}${depthStr}`);
           lines.push(formatTweetMarkdown(r, '', options));
           lines.push('');
         }
@@ -1265,8 +1278,9 @@
   function formatTweetPlain(tweet, options = {}) {
     const lines = [];
     const v = tweet.author.verified !== 'none' ? ` verified:${tweet.author.verified}` : '';
+    const timestamp = options.includeTimestamps !== false ? ` - ${tweet.timestamp.display ?? 'null'}` : '';
 
-    lines.push(`${tweet.author.name || 'Unknown'} (${tweet.author.handle || '?'})${v} - ${tweet.timestamp.display || '?'}`);
+    lines.push(`${tweet.author.name ?? 'null'} (${tweet.author.handle ?? 'null'})${v}${timestamp}`);
 
     if (tweet.threading.replyTo) {
       lines.push(`Replying to ${tweet.threading.replyTo}`);
@@ -1275,7 +1289,7 @@
     if (tweet.text) lines.push(tweet.text);
 
     if (tweet.quotedTweet) {
-      lines.push(`Quoted: ${tweet.quotedTweet.author.handle || '?'} - ${tweet.quotedTweet.text || ''}`);
+      lines.push(`Quoted: ${tweet.quotedTweet.author.handle ?? 'null'} - ${tweet.quotedTweet.text ?? 'null'}`);
     }
 
     if (tweet.linkCard) {
@@ -1337,7 +1351,8 @@
           const depth = r.threading.depth > 1 ? ` [depth:${r.threading.depth}]` : '';
           const op = r.threading.isOp ? ' (OP)' : '';
           const replyTo = r.threading.replyTo ? ` replying to ${r.threading.replyTo}` : '';
-          lines.push(`${i + 1}. ${r.author.handle || '?'}${op} - ${r.timestamp.display || '?'}${depth}${replyTo}`);
+          const timeLabel = options.includeTimestamps !== false ? ` - ${r.timestamp.display ?? 'null'}` : '';
+          lines.push(`${i + 1}. ${r.author.handle ?? 'null'}${op}${timeLabel}${depth}${replyTo}`);
           lines.push(formatTweetPlain(r, options));
           lines.push('');
         }
@@ -1404,52 +1419,60 @@
     };
   }
 
-  let extractedData;
-  if (pageType === 'post') {
-    extractedData = extractPostPage();
-  } else {
-    extractedData = extractProfilePage();
-  }
+  try {
+    let extractedData;
+    if (pageType === 'post') {
+      extractedData = extractPostPage();
+    } else {
+      extractedData = extractProfilePage();
+    }
 
-  if (extractedData.error) {
+    if (extractedData.error) {
+      return {
+        success: false,
+        error: 'no_content',
+        message: extractedData.error,
+      };
+    }
+
+    const payload = buildPayload(pageType, url, extractedData);
+
+    // Generate all three formats from canonical payload
+    const structured = formatStructured(payload);
+    const markdown = formatMarkdown(payload);
+    const plain = formatPlain(payload);
+
+    // Calculate token estimates for the default (structured) format
+    const tokens = estimateTokens(structured);
+    payload.meta.estimatedTokens = tokens;
+    payload.meta.tokenSize = classifyTokenSize(tokens);
+
+    // Re-generate formatted strings with updated metadata
+    const structuredFinal = formatStructured(payload);
+    const markdownFinal = formatMarkdown(payload);
+    const plainFinal = formatPlain(payload);
+
+    return {
+      success: true,
+      pageType: pageType,
+      stats: {
+        tweets: payload.meta.totalTweets,
+        links: payload.meta.totalLinks,
+        images: payload.meta.totalImages,
+        tokens: tokens,
+        tokenSize: payload.meta.tokenSize,
+      },
+      structured: structuredFinal,
+      markdown: markdownFinal,
+      plain: plainFinal,
+      payload: payload,
+    };
+  } catch {
     return {
       success: false,
-      error: 'no_content',
-      message: extractedData.error,
+      error: 'extraction_failed',
+      message: 'Extraction failed — try refreshing the page and packaging again',
     };
   }
-
-  const payload = buildPayload(pageType, url, extractedData);
-
-  // Generate all three formats
-  const structured = formatStructured(payload);
-  const markdown = formatMarkdown(payload);
-  const plain = formatPlain(payload);
-
-  // Calculate token estimates for the default (structured) format
-  const tokens = estimateTokens(structured);
-  payload.meta.estimatedTokens = tokens;
-  payload.meta.tokenSize = classifyTokenSize(tokens);
-
-  // Re-generate structured with updated token count
-  const structuredFinal = formatStructured(payload);
-  const markdownFinal = formatMarkdown(payload);
-  const plainFinal = formatPlain(payload);
-
-  return {
-    success: true,
-    pageType: pageType,
-    stats: {
-      tweets: payload.meta.totalTweets,
-      links: payload.meta.totalLinks,
-      images: payload.meta.totalImages,
-      tokens: tokens,
-      tokenSize: payload.meta.tokenSize,
-    },
-    structured: structuredFinal,
-    markdown: markdownFinal,
-    plain: plainFinal,
-    payload: payload,
-  };
 
 })();
