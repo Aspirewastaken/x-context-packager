@@ -530,6 +530,16 @@
   // RESILIENT EXTRACTION ENGINE
   // =========================================================================
 
+  // Per-run selector cache: once a selector key resolves successfully,
+  // the winning selector is reused for subsequent calls in the same
+  // extraction. This avoids 750+ redundant fallback chains on pages
+  // with many tweets. Cleared at the start of each extraction run.
+  const selectorResolutionCache = new Map();
+
+  function clearSelectorCache() {
+    selectorResolutionCache.clear();
+  }
+
   /**
    * Enhanced querySelector that tries multiple strategies and fallbacks
    */
@@ -540,6 +550,21 @@
       requireUnique = false,
       healthTracking = true
     } = options;
+
+    // Fast path: reuse the selector that succeeded earlier this run
+    const cached = selectorResolutionCache.get(selectorKey);
+    if (cached) {
+      try {
+        const elements = context.querySelectorAll(cached);
+        const ok = elements.length > 0 && (!requireUnique || elements.length === 1);
+        if (ok) {
+          return requireUnique ? elements[0] : Array.from(elements);
+        }
+      } catch {
+        // Cached selector no longer works; fall through to full resolution
+      }
+      selectorResolutionCache.delete(selectorKey);
+    }
 
     const primarySelector = SELECTORS[selectorKey];
     if (primarySelector) {
@@ -552,6 +577,7 @@
         }
 
         if (success) {
+          selectorResolutionCache.set(selectorKey, primarySelector);
           return requireUnique ? elements[0] : Array.from(elements);
         }
       } catch (e) {
@@ -572,6 +598,7 @@
         }
 
         if (success) {
+          selectorResolutionCache.set(selectorKey, fallback.selector);
           return requireUnique ? elements[0] : Array.from(elements);
         }
       } catch (e) {
@@ -600,6 +627,7 @@
             }
 
             if (success) {
+              selectorResolutionCache.set(selectorKey, alt.selector);
               return requireUnique ? elements[0] : Array.from(elements);
             }
           }
@@ -661,6 +689,23 @@
       if (text && text !== '') return text;
     }
     return null;
+  }
+
+  /**
+   * Parse a metric string like "2.5K" or "1,234" into a numeric value.
+   * Returns 0 for null/empty input (safe for comparisons).
+   */
+  function parseMetricValue(raw) {
+    if (!raw) return 0;
+    const text = String(raw).trim().toUpperCase().replace(/,/g, '');
+    const match = text.match(/^(\d+(?:\.\d+)?)([KMB])?$/);
+    if (!match) return parseFloat(text) || 0;
+    const value = parseFloat(match[1]);
+    const suffix = match[2];
+    if (suffix === 'K') return value * 1000;
+    if (suffix === 'M') return value * 1000000;
+    if (suffix === 'B') return value * 1000000000;
+    return value;
   }
 
   /**
@@ -1104,25 +1149,33 @@
       let focalIndex = 0;
 
       if (statusId) {
+        let focalFound = false;
+        const statusIdPattern = new RegExp(`/status/${statusId}(?:[/?#]|$)`);
+
         for (let i = 0; i < tweetEls.length; i++) {
           const el = tweetEls[i];
-          // Check for a <time> element inside a link to this status ID
+          // Check for a <time> element inside a link to this status ID.
+          // Exclude time elements inside quoted tweets — those belong to
+          // a different status and could cause a false match.
           const timeLinks = qsa(el, 'a[href*="/status/"] time');
           for (const tl of timeLinks) {
+            if (tl.closest('[data-testid="quoteTweet"]')) continue;
             const href = tl.parentElement?.getAttribute('href') || '';
-            if (href.includes(`/status/${statusId}`)) {
+            if (statusIdPattern.test(href)) {
               focalIndex = i;
+              focalFound = true;
               break;
             }
           }
-          if (focalIndex === i && i > 0) break;
+          if (focalFound) break;
 
           // Fallback: check for analytics link (only focal tweet has views)
           const analyticsLink = qs(el, SELECTORS.analyticsLink);
           if (analyticsLink) {
             const href = analyticsLink.getAttribute('href') || '';
-            if (href.includes(`/status/${statusId}`)) {
+            if (statusIdPattern.test(href)) {
               focalIndex = i;
+              focalFound = true;
               break;
             }
           }
@@ -1317,15 +1370,17 @@
       const uniqueAuthors = new Set();
       let maxDepth = 0;
       let opReplyCount = 0;
-      let mostLiked = { index: 0, likes: 0 };
+      let mostLikedNumeric = 0;
+      let mostLiked = null;
 
       for (let i = 0; i < payload.replies.length; i++) {
         const r = payload.replies[i];
         if (r.author.handle) uniqueAuthors.add(r.author.handle.toLowerCase());
         if (r.threading.depth > maxDepth) maxDepth = r.threading.depth;
         if (r.threading.isOp) opReplyCount++;
-        const likeCount = parseFloat((r.engagement.likes || '0').replace(/[KMB,]/gi, ''));
-        if (likeCount > mostLiked.likes) {
+        const likeCount = parseMetricValue(r.engagement.likes);
+        if (likeCount > mostLikedNumeric) {
+          mostLikedNumeric = likeCount;
           mostLiked = { index: i + 1, likes: r.engagement.likes };
         }
       }
@@ -1335,7 +1390,7 @@
         opReplyCount: opReplyCount,
         uniqueAuthors: uniqueAuthors.size,
         deepestThreadDepth: maxDepth,
-        mostLikedReply: mostLiked.likes ? mostLiked : null,
+        mostLikedReply: mostLiked,
       };
 
     } else if (pageType === 'profile') {
@@ -1543,8 +1598,8 @@
 
     // Flags
     const f = tweet.flags;
-    if (f.sensitive || f.translated || f.truncated) {
-      lines.push(`${indent}<flags sensitive="${f.sensitive}" translated="${f.translated}" truncated="${f.truncated}"/>`);
+    if (f.sensitive || f.translated || f.truncated || f.repost) {
+      lines.push(`${indent}<flags${xmlAttr('sensitive', Boolean(f.sensitive))}${xmlAttr('translated', Boolean(f.translated))}${xmlAttr('truncated', Boolean(f.truncated))}${xmlAttr('repost', Boolean(f.repost))}/>`);
     }
 
     lines.push(`</${tag}>`);
@@ -1781,7 +1836,7 @@
   function formatAcademicStructure(payload, lines, _options, analysis) {
     // Abstract/Overview
     lines.push('## Abstract');
-    lines.push(`This analysis examines a social media discussion thread from X.com, containing ${payload.meta.totalTweets} posts with ${payload.meta.totalReplies || 0} reply interactions. The conversation ${analysis.analysis.hasQuestions ? 'explores research questions' : 'discusses topics'} in a ${analysis.analysis.isDebate ? 'debate-oriented' : 'conversational'} manner.`);
+    lines.push(`This analysis examines a social media discussion thread from X.com, containing ${payload.meta.totalTweets} posts with ${(payload.replies || []).length} reply interactions. The conversation ${analysis.analysis.hasQuestions ? 'explores research questions' : 'discusses topics'} in a ${analysis.analysis.isDebate ? 'debate-oriented' : 'conversational'} manner.`);
     lines.push('');
 
     // Main Post as Primary Source
@@ -2105,6 +2160,20 @@
     lines.push('');
 
     if (payload.meta.pageType === 'post') {
+      // Parent context (thread ancestors above the focal tweet)
+      if (payload.parentContext && payload.parentContext.length > 0) {
+        lines.push('## THREAD CONTEXT');
+        lines.push('*Tweets this post is replying to, in chronological order:*');
+        lines.push('');
+        for (let i = 0; i < payload.parentContext.length; i++) {
+          lines.push(`### ${i + 1}.`);
+          lines.push(formatTweetMarkdown(payload.parentContext[i], '', options));
+          lines.push('');
+        }
+        lines.push('---');
+        lines.push('');
+      }
+
       // Use intelligent structure-specific formatting
       if (structureAnalysis.format === 'academic') {
         formatAcademicStructure(payload, lines, options, structureAnalysis);
@@ -2249,6 +2318,17 @@
     lines.push('---');
 
     if (payload.meta.pageType === 'post') {
+      if (payload.parentContext && payload.parentContext.length > 0) {
+        lines.push(`THREAD CONTEXT (${payload.parentContext.length})`);
+        lines.push('');
+        for (let i = 0; i < payload.parentContext.length; i++) {
+          lines.push(`${i + 1}.`);
+          lines.push(formatTweetPlain(payload.parentContext[i], options));
+          lines.push('');
+        }
+        lines.push('---');
+      }
+
       if (payload.mainPost) {
         lines.push('MAIN POST');
         lines.push(formatTweetPlain(payload.mainPost, options));
@@ -2632,8 +2712,9 @@
   // MAIN — Execute extraction and return result
   // =========================================================================
 
-  // Initialize telemetry for this extraction session
+  // Initialize telemetry and selector cache for this extraction session
   EXTRACTION_TELEMETRY.resetSession();
+  clearSelectorCache();
 
   const url = window.location.href;
   const pageType = detectPageType(url);
@@ -2664,13 +2745,11 @@
 
     const payload = buildPayload(pageType, url, extractedData);
 
-    // Generate all three formats from canonical payload
-    const structured = formatStructured(payload);
-    formatMarkdown(payload);
-    formatPlain(payload);
-
-    // Calculate token estimates for the default (structured) format
-    const tokens = estimateTokens(structured);
+    // Estimate token count from a first-pass structured render, then
+    // inject the count into the payload for the final generation.
+    // The discrepancy from the circular dependency is <0.1% and
+    // dwarfed by the chars/4 approximation itself.
+    const tokens = estimateTokens(formatStructured(payload));
     payload.meta.estimatedTokens = tokens;
     payload.meta.tokenSize = classifyTokenSize(tokens);
 

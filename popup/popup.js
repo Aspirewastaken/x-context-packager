@@ -328,6 +328,7 @@
         tool: payload?.meta?.tool || 'X Context Packager v1.0.0 by AdLab',
       },
       mainPost: payload?.mainPost || null,
+      parentContext: [],
       replies: [],
       profile: payload?.profile || null,
       posts: [],
@@ -340,6 +341,7 @@
     };
 
     if (pageType === 'post') {
+      model.parentContext = Array.isArray(payload?.parentContext) ? payload.parentContext : [];
       const replies = Array.isArray(payload?.replies) ? payload.replies : [];
       if (options.maxReplies !== 'all') {
         const cap = Number.parseInt(options.maxReplies, 10);
@@ -351,8 +353,9 @@
       model.posts = Array.isArray(payload?.posts) ? payload.posts : [];
     }
 
+    // Include parent context tweets in aggregation (consistent with content.js buildPayload)
     const postTweets = pageType === 'post'
-      ? [model.mainPost, ...model.replies].filter(Boolean)
+      ? [...model.parentContext, model.mainPost, ...model.replies].filter(Boolean)
       : model.posts.slice();
 
     const hashtagMap = {};
@@ -578,6 +581,15 @@
     lines.push('');
 
     if (model.meta.pageType === 'post') {
+      if (model.parentContext && model.parentContext.length > 0) {
+        lines.push(`<parent_context count="${model.parentContext.length}">`);
+        model.parentContext.forEach((parent, i) => {
+          lines.push(formatStructuredTweet(parent, 'parent', options, xmlAttr('index', i + 1)));
+        });
+        lines.push('</parent_context>');
+        lines.push('');
+      }
+
       if (model.mainPost) {
         lines.push(formatStructuredTweet(model.mainPost, 'main_post', options));
         lines.push('');
@@ -801,6 +813,19 @@
     lines.push('');
 
     if (model.meta.pageType === 'post') {
+      if (model.parentContext && model.parentContext.length > 0) {
+        lines.push('## THREAD CONTEXT');
+        lines.push('*Tweets this post is replying to, in chronological order:*');
+        lines.push('');
+        model.parentContext.forEach((parent, i) => {
+          lines.push(`### ${i + 1}.`);
+          lines.push(formatMarkdownTweet(parent, options));
+          lines.push('');
+        });
+        lines.push('---');
+        lines.push('');
+      }
+
       if (model.mainPost) {
         lines.push('## MAIN POST');
         lines.push(formatMarkdownTweet(model.mainPost, options));
@@ -947,6 +972,17 @@
     lines.push('---');
 
     if (model.meta.pageType === 'post') {
+      if (model.parentContext && model.parentContext.length > 0) {
+        lines.push(`THREAD CONTEXT (${model.parentContext.length})`);
+        lines.push('');
+        model.parentContext.forEach((parent, i) => {
+          lines.push(`${i + 1}.`);
+          lines.push(formatPlainTweet(parent, options));
+          lines.push('');
+        });
+        lines.push('---');
+      }
+
       if (model.mainPost) {
         lines.push('MAIN POST');
         lines.push(formatPlainTweet(model.mainPost, options));
