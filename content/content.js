@@ -287,7 +287,7 @@
           if (href.includes('/search?q=%23') || href.includes('/hashtag/')) continue;
           if (/^\/[^/]+\/?$/.test(href) && display.startsWith('@')) continue;
           // Keep external links and t.co
-          if (href.startsWith('http') || href.startsWith('https')) {
+          if (href.includes('://')) {
             tweet.links.push({ url: href, display: display });
           }
         }
@@ -436,7 +436,7 @@
         const linkEls = qsa(textEl, 'a[href]');
         for (const a of linkEls) {
           const href = a.getAttribute('href') || '';
-          if (href.startsWith('http')) {
+          if (href.includes('://')) {
             qt.links.push({ url: href, display: a.textContent?.trim() || '' });
           }
         }

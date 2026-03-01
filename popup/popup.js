@@ -65,7 +65,14 @@
   // ── CHECK PAGE — Determine if we're on X.com ──
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const tabUrl = tab?.url || '';
-  const isXcom = /^https:\/\/(www\.)?(x\.com|twitter\.com)/.test(tabUrl);
+  const isXcom = (() => {
+    try {
+      const host = new URL(tabUrl).hostname.replace(/^www\./, '');
+      return host === 'x.com' || host === 'twitter.com';
+    } catch {
+      return false;
+    }
+  })();
 
   if (!isXcom) {
     // Not on X.com — show calm message
