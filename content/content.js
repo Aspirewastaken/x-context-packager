@@ -39,7 +39,7 @@
 
     // Engagement (aria-label based)
     reply: '[data-testid="reply"]',
-    retweet: '[data-testid="retweet"]',
+    retweet: '[data-testid="retweet"], [data-testid="repost"]',
     like: '[data-testid="like"]',
     unlike: '[data-testid="unlike"]',
     bookmark: '[data-testid="bookmark"]',
@@ -482,7 +482,7 @@
           card.domain = text;
         } else if (!card.title && text.length > 5) {
           card.title = text;
-        } else if (!card.description && text.length > card.title?.length) {
+        } else if (!card.description && text.length > (card.title ? card.title.length : 0)) {
           card.description = text;
         }
       }
@@ -928,6 +928,13 @@
         for (const l of qt.links) lines.push(`${indent}    <link${xmlAttr('url', l.url)}${xmlAttr('display', l.display)}/>`);
         lines.push(`${indent}  </links>`);
       }
+      if (options.includeImages !== false && qt.images && qt.images.length > 0) {
+        lines.push(`${indent}  <images>`);
+        for (const img of qt.images) {
+          lines.push(`${indent}    <image${xmlAttr('url', img.url)}${xmlAttr('alt', img.alt)}/>`);
+        }
+        lines.push(`${indent}  </images>`);
+      }
       lines.push(`${indent}</quoted_tweet>`);
     }
 
@@ -1123,6 +1130,16 @@
     if (tweet.quotedTweet) {
       lines.push('');
       lines.push(`> **Quoted:** ${tweet.quotedTweet.author.handle ?? 'null'} — ${tweet.quotedTweet.text ?? 'null'}`);
+      if (tweet.quotedTweet.links && tweet.quotedTweet.links.length > 0) {
+        for (const l of tweet.quotedTweet.links) {
+          lines.push(`> 🔗 [${l.display}](${l.url})`);
+        }
+      }
+      if (options.includeImages !== false && tweet.quotedTweet.images && tweet.quotedTweet.images.length > 0) {
+        for (const img of tweet.quotedTweet.images) {
+          lines.push(`> 🖼️ ${img.url}${img.alt ? ' (' + img.alt + ')' : ''}`);
+        }
+      }
     }
 
     if (tweet.linkCard) {
@@ -1290,6 +1307,12 @@
 
     if (tweet.quotedTweet) {
       lines.push(`Quoted: ${tweet.quotedTweet.author.handle ?? 'null'} - ${tweet.quotedTweet.text ?? 'null'}`);
+      if (tweet.quotedTweet.links && tweet.quotedTweet.links.length > 0) {
+        lines.push(`Quoted Links: ${tweet.quotedTweet.links.map(l => l.url).join(', ')}`);
+      }
+      if (options.includeImages !== false && tweet.quotedTweet.images && tweet.quotedTweet.images.length > 0) {
+        lines.push(`Quoted Images: ${tweet.quotedTweet.images.map(i => i.url).join(', ')}`);
+      }
     }
 
     if (tweet.linkCard) {
