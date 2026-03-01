@@ -33,6 +33,7 @@
   let cachedResult = null;
   let currentFormat = 'structured';
   let gearExpanded = false;
+  let packageButtonMode = 'extract'; // extract | extracting | copy
 
   // ── Load saved preferences ──
   const prefs = await loadPrefs();
@@ -82,7 +83,16 @@
 
   // ── PACKAGE BUTTON CLICK ──
   packageBtn.addEventListener('click', async () => {
-    await runExtraction();
+    if (packageButtonMode === 'extract') {
+      await runExtraction();
+      return;
+    }
+
+    if (packageButtonMode === 'copy' && cachedResult) {
+      const text = getFormattedText(cachedResult, currentFormat);
+      await copyToClipboard(text);
+      flashCopied();
+    }
   });
 
   // ── PACKAGE AGAIN BUTTON ──
@@ -132,6 +142,8 @@
 
   // ── EXTRACTION ──
   async function runExtraction() {
+    packageButtonMode = 'extracting';
+
     // Set button to extracting state
     packageBtn.classList.add('extracting');
     packageBtn.classList.remove('success', 'copy-again');
@@ -166,6 +178,7 @@
       packageBtn.classList.add('success');
       btnText.textContent = '✅ Copied';
       packageBtn.disabled = false;
+      packageButtonMode = 'copy';
 
       // Show token indicator
       const ts = result.stats.tokenSize;
@@ -192,17 +205,13 @@
           packageBtn.classList.remove('success');
           packageBtn.classList.add('copy-again');
           btnText.textContent = '📋 Copy Again';
-          packageBtn.onclick = async () => {
-            const text = getFormattedText(cachedResult, currentFormat);
-            await copyToClipboard(text);
-            flashCopied();
-          };
+          packageButtonMode = 'copy';
         }
       }, 3000);
 
     } catch (err) {
       showError('Failed to extract — try refreshing the page');
-      console.error('X Context Packager error:', err);
+      packageButtonMode = 'extract';
     }
   }
 
@@ -236,17 +245,21 @@
     packageBtn.classList.remove('copy-again');
     packageBtn.classList.add('success');
     btnText.textContent = '✅ Copied';
+    packageButtonMode = 'copy';
     setTimeout(() => {
       packageBtn.classList.remove('success');
       packageBtn.classList.add('copy-again');
       btnText.textContent = '📋 Copy Again';
+      packageButtonMode = 'copy';
     }, 2000);
   }
 
   function showError(message) {
     packageBtn.classList.remove('extracting');
     packageBtn.disabled = false;
+    packageBtn.classList.remove('copy-again', 'success');
     btnText.textContent = '📦 Package';
+    packageButtonMode = 'extract';
     // Show error briefly via token indicator
     tokenDot.className = 'token-dot red';
     tokenLabel.textContent = message;
