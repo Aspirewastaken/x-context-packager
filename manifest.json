@@ -12,14 +12,12 @@
     "clipboardWrite",
     "storage"
   ],
-<<<<<<< Current (Your changes)
+
   "host_permissions": [
     "*://x.com/*",
     "*://twitter.com/*"
   ],
-=======
 
->>>>>>> Incoming (Background Agent changes)
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "Package X.com context for LLMs",
@@ -32,7 +30,7 @@
 
   "icons": {
     "16": "icons/icon16.png",
-    "32": "icons/icon48.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
