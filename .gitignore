@@ -1,17 +1,59 @@
-# OS files
-.DS_Store
-Thumbs.db
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Editor files
+# Build outputs
+build/
+dist/
+*.zip
+
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Node (not used but just in case)
-node_modules/
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Build artifacts (not used but just in case)
-dist/
-build/
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Chrome extension development
+chrome-profile/
+chrome-user-data/
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Local configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

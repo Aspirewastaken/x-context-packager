@@ -3,27 +3,51 @@
   "name": "X Context Packager",
   "version": "1.0.0",
   "description": "One-click full context extraction from X.com for LLM research. Built by AdLab.",
+  "author": "AdLab (Total New Media Management)",
+  "homepage_url": "https://github.com/Aspirewastaken/x-context-packager",
+
   "permissions": [
     "activeTab",
     "scripting",
     "clipboardWrite",
     "storage"
   ],
+<<<<<<< Current (Your changes)
   "host_permissions": [
     "*://x.com/*",
     "*://twitter.com/*"
   ],
+=======
+
+>>>>>>> Incoming (Background Agent changes)
   "action": {
     "default_popup": "popup/popup.html",
+    "default_title": "Package X.com context for LLMs",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
+
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon48.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+
+  "web_accessible_resources": [],
+
+  "minimum_chrome_version": "88",
+
+  "offline_enabled": true,
+
+  "short_name": "X Context Packager",
+
+  "version_name": "1.0.0 - Initial Release"
 }

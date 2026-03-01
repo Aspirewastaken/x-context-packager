@@ -33,6 +33,12 @@
   const optTimestamps = document.getElementById('opt-timestamps');
   const optMaxReplies = document.getElementById('opt-max-replies');
 
+  // Health monitoring elements
+  const healthIndicator = document.getElementById('health-indicator');
+  const healthDot = document.getElementById('health-dot');
+  const healthLabel = document.getElementById('health-label');
+  const healthIssues = document.getElementById('health-issues');
+
   // ── State ──
   let cachedResult = null;
   let currentFormat = 'structured';
@@ -60,6 +66,72 @@
   // Show gear panel if user prefers it expanded
   if (gearExpanded) {
     gearPanel.classList.remove('hidden');
+  }
+
+  // Load and display health status
+  loadHealthStatus();
+
+  // ── HEALTH MONITORING ──
+  async function updateHealthIndicators(telemetry) {
+    if (!healthIndicator || !telemetry) return;
+
+    const systemHealth = telemetry.systemHealth || 1.0;
+    const fallbackCount = telemetry.fallbacksTriggered || 0;
+    const selfHealingCount = telemetry.selfHealingUsed || 0;
+
+    // Determine health level
+    let healthLevel = 'green';
+    let healthText = 'Healthy';
+
+    if (systemHealth < 0.5 || selfHealingCount > 10) {
+      healthLevel = 'red';
+      healthText = 'Needs Attention';
+    } else if (systemHealth < 0.8 || fallbackCount > 5 || selfHealingCount > 3) {
+      healthLevel = 'yellow';
+      healthText = 'Monitoring';
+    }
+
+    // Update UI
+    healthDot.className = `health-dot ${healthLevel}`;
+    healthLabel.textContent = `System Health: ${healthText}`;
+
+    // Show issues if any
+    const issues = [];
+    if (fallbackCount > 0) {
+      issues.push(`${fallbackCount} selector fallback${fallbackCount > 1 ? 's' : ''} used`);
+    }
+    if (selfHealingCount > 0) {
+      issues.push(`${selfHealingCount} self-healing operation${selfHealingCount > 1 ? 's' : ''} performed`);
+    }
+    if (systemHealth < 0.8) {
+      issues.push(`System health: ${Math.round(systemHealth * 100)}%`);
+    }
+
+    if (issues.length > 0) {
+      healthIssues.textContent = issues.join(' • ');
+      healthIssues.classList.remove('hidden');
+    } else {
+      healthIssues.classList.add('hidden');
+    }
+
+    healthIndicator.classList.remove('hidden');
+  }
+
+  // Load and show current health status
+  async function loadHealthStatus() {
+    try {
+      const result = await chrome.storage.local.get(['lastHealthReport', 'extractionQuality']);
+      if (result.lastHealthReport) {
+        const telemetry = {
+          systemHealth: result.lastHealthReport.systemHealth || 1.0,
+          fallbacksTriggered: result.lastHealthReport.sessionStats?.fallbacksTriggered || 0,
+          selfHealingUsed: result.lastHealthReport.sessionStats?.selfHealingUsed || 0
+        };
+        updateHealthIndicators(telemetry);
+      }
+    } catch (e) {
+      // Silent fail - health monitoring is nice-to-have
+    }
   }
 
   // ── CHECK PAGE — Determine if we're on X.com ──
@@ -198,6 +270,11 @@
 
       // Show package again button
       packageAgainBtn.classList.remove('hidden');
+
+      // Update health indicators if telemetry available
+      if (result.telemetry) {
+        updateHealthIndicators(result.telemetry);
+      }
 
       // After 3 seconds, change to "Copy Again"
       setTimeout(() => {
@@ -422,9 +499,9 @@
     if (!match) return Number.parseFloat(text) || -1;
     const value = Number.parseFloat(match[1]);
     const suffix = match[2];
-    if (suffix === 'K') return value * 1_000;
-    if (suffix === 'M') return value * 1_000_000;
-    if (suffix === 'B') return value * 1_000_000_000;
+    if (suffix === 'K') return value * 1000;
+    if (suffix === 'M') return value * 1000000;
+    if (suffix === 'B') return value * 1000000000;
     return value;
   }
 
