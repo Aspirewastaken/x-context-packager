@@ -1,0 +1,92 @@
+{
+  "name": "x-context-packager",
+  "version": "1.0.0",
+  "description": "One-click full context extraction from X.com for LLM research",
+  "main": "content/content.js",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "validate": "node scripts/validate.js"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.57.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "<rootDir>/tests/unit/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "content/**/*.js",
+      "popup/**/*.js",
+      "!**/node_modules/**"
+    ]
+  },
+  "eslintConfig": {
+    "env": {
+      "browser": true,
+      "es2020": true,
+      "node": true,
+      "jest": true
+    },
+    "extends": [
+      "eslint:recommended"
+    ],
+    "parserOptions": {
+      "ecmaVersion": 2020,
+      "sourceType": "module"
+    },
+    "rules": {
+      "no-unused-vars": "warn",
+      "no-console": "off",
+      "no-useless-escape": "off"
+    },
+    "globals": {
+      "chrome": "readonly"
+    },
+    "overrides": [
+      {
+        "files": ["scripts/*.js"],
+        "env": {
+          "node": true,
+          "browser": false
+        },
+        "globals": {
+          "chrome": false
+        }
+      },
+      {
+        "files": ["tests/**/*.js"],
+        "env": {
+          "jest": true,
+          "browser": false,
+          "node": true
+        },
+        "globals": {
+          "chrome": false
+        }
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Aspirewastaken/x-context-packager.git"
+  },
+  "keywords": [
+    "chrome-extension",
+    "x-twitter",
+    "llm",
+    "data-extraction",
+    "productivity"
+  ],
+  "author": "AdLab",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Aspirewastaken/x-context-packager/issues"
+  },
+  "homepage": "https://github.com/Aspirewastaken/x-context-packager#readme"
+}

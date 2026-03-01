@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run full validation
+      run: npm run validate && npm run lint && npm test -- --watchAll=false
+
+    - name: Create extension zip
+      run: |
+        # Create clean build directory
+        mkdir -p build
+        cp -r manifest.json popup content icons docs build/
+
+        # Remove development files
+        rm -f build/content/content.js.map 2>/dev/null || true
+
+        # Create zip file
+        cd build
+        zip -r ../x-context-packager-${{ github.ref_name }}.zip .
+
+    - name: Create GitHub release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          ## Changes
+
+          See [CHANGELOG.md](CHANGELOG.md) for detailed changes in this release.
+
+          ## Installation
+
+          1. Download `x-context-packager-${{ github.ref_name }}.zip`
+          2. Open `chrome://extensions`
+          3. Enable Developer Mode
+          4. Drag and drop the zip file to install
+
+          ## Verification
+
+          - ✅ All tests pass
+          - ✅ Code validated
+          - ✅ Ready for Chrome Web Store submission
+        draft: false
+        prerelease: false
+
+    - name: Upload release asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./x-context-packager-${{ github.ref_name }}.zip
+        asset_name: x-context-packager-${{ github.ref_name }}.zip
+        asset_content_type: application/zip
