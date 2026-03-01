@@ -38,8 +38,17 @@
   const healthDot = document.getElementById('health-dot');
   const healthLabel = document.getElementById('health-label');
   const healthIssues = document.getElementById('health-issues');
+  
+  // Performance elements
+  const perfSummary = document.getElementById('perf-summary');
+  const perfExtract = document.getElementById('perf-extract');
+  const perfRender = document.getElementById('perf-render');
+  const perfTotal = document.getElementById('perf-total');
 
   // ── State ──
+  let renderWorker = null;
+  let workerCallbacks = new Map();
+  let nextRequestId = 1;
   let cachedResult = null;
   let currentFormat = 'structured';
   let gearExpanded = false;
@@ -70,6 +79,36 @@
 
   // Load and display health status
   loadHealthStatus();
+  loadPerformanceStatus();
+
+  // ── PERFORMANCE MONITORING ──
+  async function loadPerformanceStatus() {
+    try {
+      const result = await chrome.storage.local.get(['lastPerformance']);
+      if (result.lastPerformance) {
+        updatePerfSummary(result.lastPerformance);
+      }
+    } catch (e) {
+      // Silent fail
+    }
+  }
+
+  function updatePerfSummary(perf) {
+    if (!perfSummary) return;
+    if (perfExtract) perfExtract.textContent = `${perf.extractMs}ms`;
+    if (perfRender) perfRender.textContent = `${perf.renderModelMs}ms`;
+    if (perfTotal) perfTotal.textContent = `${perf.totalMs}ms`;
+    perfSummary.classList.remove('hidden');
+  }
+
+  async function recordExtractionPerformance(perf) {
+    updatePerfSummary(perf);
+    try {
+      await chrome.storage.local.set({ lastPerformance: perf });
+    } catch (e) {
+      // Silent fail
+    }
+  }
 
   // ── HEALTH MONITORING ──
   async function updateHealthIndicators(telemetry) {
@@ -179,7 +218,8 @@
 
   // ── PACKAGE AGAIN BUTTON ──
   packageAgainBtn.addEventListener('click', async () => {
-    await runExtraction();
+    const isNextPage = packageAgainBtn.dataset.nextPage === 'true';
+    await runExtraction(isNextPage);
   });
 
   // ── GEAR TOGGLE ──
@@ -227,23 +267,52 @@
     }
   });
 
+  // ── EXTRACTION CONTEXT ──
+  function buildExtractionContext(nextPage) {
+    return {
+      nextPage,
+      options: getCurrentOptions(),
+      timestamp: Date.now()
+    };
+  }
+
+  async function setExtractionContext(tabId, context) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (ctx) => {
+          window.__xcpExtractionContext = ctx;
+        },
+        args: [context]
+      });
+    } catch (e) {
+      console.warn('Failed to set extraction context', e);
+    }
+  }
+
   // ── EXTRACTION ──
-  async function runExtraction() {
+  async function runExtraction(nextPage = false) {
+    const startTime = Date.now();
     packageButtonMode = 'extracting';
 
     // Set button to extracting state
     packageBtn.classList.add('extracting');
     packageBtn.classList.remove('success', 'copy-again');
-    btnText.textContent = '📦 Packaging...';
+    setExtractionProgress(nextPage ? 'Loading more...' : '📦 Packaging...');
     packageBtn.disabled = true;
     tokenIndicator.classList.add('hidden');
 
     try {
+      const context = buildExtractionContext(nextPage);
+      await setExtractionContext(tab.id, context);
+
+      const extractStart = Date.now();
       // Inject content script and get result
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ['content/content.js'],
       });
+      const extractMs = Date.now() - extractStart;
 
       const result = results?.[0]?.result;
 
@@ -255,7 +324,10 @@
       cachedResult = result;
 
       // Render selected format from cached payload and copy
-      const text = await renderAndCopyFromCache();
+      const { text, renderModelMs } = await renderAndCopyFromCache();
+
+      const totalMs = Date.now() - startTime;
+      recordExtractionPerformance({ extractMs, renderModelMs, totalMs });
 
       // Update UI — success state
       packageBtn.classList.remove('extracting');
@@ -270,6 +342,13 @@
 
       // Show package again button
       packageAgainBtn.classList.remove('hidden');
+      if (result.payload?.meta?.hasMore) {
+        packageAgainBtn.textContent = '📦 Package Next Page';
+        packageAgainBtn.dataset.nextPage = 'true';
+      } else {
+        packageAgainBtn.textContent = '📦 Package Again';
+        packageAgainBtn.dataset.nextPage = 'false';
+      }
 
       // Update health indicators if telemetry available
       if (result.telemetry) {
@@ -286,10 +365,72 @@
         }
       }, 3000);
 
-    } catch {
+    } catch (e) {
+      console.error(e);
       showError('Failed to extract — try refreshing the page');
       packageButtonMode = 'extract';
     }
+  }
+
+  // ── WORKER ──
+  function getRenderWorker() {
+    if (!renderWorker) {
+      try {
+        renderWorker = new Worker('performance-worker.js');
+        renderWorker.onmessage = handleRenderWorkerMessage;
+      } catch (e) {
+        console.warn('Failed to initialize performance worker, falling back to main thread', e);
+        renderWorker = null;
+      }
+    }
+    return renderWorker;
+  }
+
+  function handleRenderWorkerMessage(e) {
+    const { type, model, timingMs, error, requestId, message } = e.data;
+    
+    if (type === 'progress') {
+      setExtractionProgress(message);
+      return;
+    }
+
+    const callback = workerCallbacks.get(requestId);
+    if (!callback) return;
+
+    if (type === 'model-built') {
+      callback.resolve({ model, timingMs });
+    } else if (type === 'error') {
+      callback.reject(new Error(error));
+    }
+    
+    workerCallbacks.delete(requestId);
+  }
+
+  async function buildRenderModelAsync(payload, options) {
+    const worker = getRenderWorker();
+    
+    if (!worker) {
+      // Fallback to synchronous
+      const startTime = Date.now();
+      const model = buildRenderModel(payload, options);
+      return { model, timingMs: Date.now() - startTime };
+    }
+
+    return new Promise((resolve, reject) => {
+      const requestId = nextRequestId++;
+      workerCallbacks.set(requestId, { resolve, reject });
+      worker.postMessage({
+        type: 'build-model',
+        payload,
+        options,
+        requestId
+      });
+    }).catch(err => {
+      console.warn('Worker failed, falling back to main thread', err);
+      const startTime = Date.now();
+      const model = buildRenderModel(payload, options);
+      return { model, timingMs: Date.now() - startTime };
+    });
   }
 
   // ── HELPERS ──
@@ -304,17 +445,22 @@
   }
 
   async function renderAndCopyFromCache() {
-    if (!cachedResult || !cachedResult.payload) return '';
+    if (!cachedResult || !cachedResult.payload) return { text: '', renderModelMs: 0 };
 
     const options = getCurrentOptions();
-    const renderModel = buildRenderModel(cachedResult.payload, options);
+    
+    setExtractionProgress('Building model...');
+    const { model: renderModel, timingMs: renderModelMs } = await buildRenderModelAsync(cachedResult.payload, options);
+    
+    setExtractionProgress('Formatting text...');
     const text = renderFormattedText(renderModel, currentFormat, options);
 
     await copyToClipboard(text);
     updatePreview(text);
     updateStatsAndToken(renderModel, text);
 
-    return text;
+    hideExtractionProgress();
+    return { text, renderModelMs };
   }
 
   function buildRenderModel(payload, options) {
@@ -1077,6 +1223,14 @@
       btnText.textContent = '📋 Copy Again';
       packageButtonMode = 'copy';
     }, 2000);
+  }
+
+  function setExtractionProgress(msg) {
+    btnText.textContent = msg;
+  }
+
+  function hideExtractionProgress() {
+    // Progress is usually hidden by state changes (e.g. success or error)
   }
 
   function showError(message) {

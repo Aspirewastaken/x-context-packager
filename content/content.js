@@ -1092,10 +1092,19 @@
   // PAGE EXTRACTORS
   // =========================================================================
 
+  function normalizeRequestContext(raw) {
+    const ctx = raw || {};
+    const page = parseInt(ctx.page, 10) || 1;
+    const pageSize = parseInt(ctx.pageSize, 10) || 20;
+    const maxReplies = ctx.maxReplies === 'all' ? 'all' : (parseInt(ctx.maxReplies, 10) || 100);
+    const requestId = ctx.requestId || Date.now().toString();
+    return { page, pageSize, maxReplies, requestId };
+  }
+
   /**
    * Extract post page: main tweet + all visible replies
    */
-  function extractPostPage() {
+  function extractPostPage(options = {}) {
     try {
       const tweetEls = resilientQuerySelectorAll(document, 'tweet');
       if (tweetEls.length === 0) {
@@ -1106,9 +1115,20 @@
       const mainPost = extractTweet(tweetEls[0], { depth: 0, position: 0, isOp: false });
       const opHandle = mainPost.author.handle;
 
+      const page = options.page || 1;
+      const pageSize = options.pageSize || 20;
+      const maxReplies = options.maxReplies === 'all' ? Infinity : (options.maxReplies || 100);
+
+      const rawRepliesCount = tweetEls.length - 1;
+      const pageStart = (page - 1) * pageSize;
+      const effectiveMaxEnd = Math.min(rawRepliesCount, maxReplies);
+      const pageEnd = Math.min(pageStart + pageSize, effectiveMaxEnd);
+      
+      const hasMore = rawRepliesCount > pageEnd && pageEnd < maxReplies;
+
       // Remaining are replies
       const replies = [];
-      for (let i = 1; i < tweetEls.length; i++) {
+      for (let i = 1 + pageStart; i <= pageEnd && i < tweetEls.length; i++) {
         const el = tweetEls[i];
 
         // Calculate depth from DOM structure
@@ -1153,7 +1173,7 @@
         }
       }
 
-      return { mainPost, replies, replySortMode };
+      return { mainPost, replies, replySortMode, hasMore };
     } catch {
       return { error: 'Failed to extract post context from the current page' };
     }
@@ -1162,7 +1182,7 @@
   /**
    * Extract profile page: profile header + visible timeline posts
    */
-  function extractProfilePage() {
+  function extractProfilePage(options = {}) {
     try {
       const profile = {
         name: null,
@@ -1226,12 +1246,23 @@
 
       // Timeline posts
       const tweetEls = resilientQuerySelectorAll(document, 'tweet');
+      const page = options.page || 1;
+      const pageSize = options.pageSize || 20;
+      const maxReplies = options.maxReplies === 'all' ? Infinity : (options.maxReplies || 100);
+
+      const rawPostsCount = tweetEls.length;
+      const pageStart = (page - 1) * pageSize;
+      const effectiveMaxEnd = Math.min(rawPostsCount, maxReplies);
+      const pageEnd = Math.min(pageStart + pageSize, effectiveMaxEnd);
+      
+      const hasMore = rawPostsCount > pageEnd && pageEnd < maxReplies;
+
       const posts = [];
-      for (let i = 0; i < tweetEls.length; i++) {
+      for (let i = pageStart; i < pageEnd && i < tweetEls.length; i++) {
         posts.push(extractTweet(tweetEls[i], { depth: 0, position: i + 1, isOp: false }));
       }
 
-      return { profile, posts };
+      return { profile, posts, hasMore };
     } catch {
       return { error: 'Failed to extract profile context from the current page' };
     }
@@ -1253,6 +1284,10 @@
         estimatedTokens: 0,
         tokenSize: null,
         page: options.page || 1,
+        pageSize: options.pageSize || 20,
+        maxReplies: options.maxReplies || 100,
+        hasMore: extractedData.hasMore || false,
+        requestId: options.requestId || null,
         tool: 'X Context Packager v1.0.0 by AdLab',
       },
       mainPost: null,
@@ -1275,15 +1310,6 @@
       payload.replies = extractedData.replies || [];
       allTweets = [extractedData.mainPost, ...payload.replies];
       payload.meta.totalTweets = allTweets.length;
-
-      // Apply max replies cap
-      if (options.maxReplies && options.maxReplies !== 'all') {
-        const cap = parseInt(options.maxReplies, 10);
-        if (!isNaN(cap) && payload.replies.length > cap) {
-          payload.replies = payload.replies.slice(0, cap);
-          allTweets = [extractedData.mainPost, ...payload.replies];
-        }
-      }
 
       // Conversation summary
       const uniqueAuthors = new Set();
@@ -2598,6 +2624,9 @@
   // Initialize telemetry for this extraction session
   EXTRACTION_TELEMETRY.resetSession();
 
+  const tStart = performance.now();
+  const ctx = normalizeRequestContext(window.__xcpExtractionContext);
+
   const url = window.location.href;
   const pageType = detectPageType(url);
 
@@ -2611,11 +2640,13 @@
 
   try {
     let extractedData;
+    const tExtractStart = performance.now();
     if (pageType === 'post') {
-      extractedData = extractPostPage();
+      extractedData = extractPostPage(ctx);
     } else {
-      extractedData = extractProfilePage();
+      extractedData = extractProfilePage(ctx);
     }
+    const extractedDataMs = performance.now() - tExtractStart;
 
     if (extractedData.error) {
       return {
@@ -2625,8 +2656,11 @@
       };
     }
 
-    const payload = buildPayload(pageType, url, extractedData);
+    const tPayloadStart = performance.now();
+    const payload = buildPayload(pageType, url, extractedData, ctx);
+    const payloadMs = performance.now() - tPayloadStart;
 
+    const tFormatStart = performance.now();
     // Generate all three formats from canonical payload
     const structured = formatStructured(payload);
     const markdown = formatMarkdown(payload);
@@ -2641,6 +2675,7 @@
     const structuredFinal = formatStructured(payload);
     const markdownFinal = formatMarkdown(payload);
     const plainFinal = formatPlain(payload);
+    const formattingMs = performance.now() - tFormatStart;
 
     // Calculate extraction quality score
     let qualityScore = 1.0;
@@ -2653,6 +2688,8 @@
 
     // Get current system health
     const systemHealth = SELECTOR_HEALTH.getSystemHealth();
+
+    const totalMs = performance.now() - tStart;
 
     return {
       success: true,
@@ -2668,12 +2705,22 @@
       markdown: markdownFinal,
       plain: plainFinal,
       payload: payload,
+      extractedDataMs,
+      payloadMs,
+      formattingMs,
+      totalMs,
+      requestId: ctx.requestId,
       telemetry: {
         systemHealth: systemHealth,
         extractionQuality: qualityScore,
         selectorsUsed: Array.from(EXTRACTION_TELEMETRY.currentSession.selectorsUsed),
         fallbacksTriggered: EXTRACTION_TELEMETRY.currentSession.fallbacksTriggered,
-        selfHealingUsed: EXTRACTION_TELEMETRY.currentSession.selfHealingUsed
+        selfHealingUsed: EXTRACTION_TELEMETRY.currentSession.selfHealingUsed,
+        extractedDataMs,
+        payloadMs,
+        formattingMs,
+        totalMs,
+        requestId: ctx.requestId
       }
     };
   } catch (error) {
@@ -2684,13 +2731,19 @@
       timestamp: Date.now()
     });
 
+    const totalMs = performance.now() - tStart;
+
     return {
       success: false,
       error: 'extraction_failed',
       message: 'Extraction failed — try refreshing the page and packaging again',
+      totalMs,
+      requestId: typeof ctx !== 'undefined' ? ctx.requestId : null,
       telemetry: {
         systemHealth: SELECTOR_HEALTH.getSystemHealth(),
-        error: error.message
+        error: error.message,
+        totalMs,
+        requestId: typeof ctx !== 'undefined' ? ctx.requestId : null
       }
     };
   }

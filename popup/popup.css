@@ -261,8 +261,8 @@ header {
   margin-top: 0;
 }
 
-/* ── Stats Detail ── */
-.stats-row {
+/* ── Stats Detail & Performance ── */
+.stats-row, .perf-summary {
   font-size: 12px;
   color: var(--text-secondary);
   margin-bottom: 8px;
