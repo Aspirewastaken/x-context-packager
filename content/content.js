@@ -179,6 +179,82 @@
       { selector: '[role="banner"] p, [role="banner"] span:not([role])', confidence: 0.8, strategy: 'banner-text' },
       { selector: '[data-testid*="bio"]', confidence: 0.7, strategy: 'wildcard-bio' },
       { selector: 'main header p', confidence: 0.6, strategy: 'header-para' }
+    ],
+
+    profileName: [
+      { selector: '[data-testid="UserName"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="userProfileName"]', confidence: 0.9, strategy: 'profile-name' },
+      { selector: '[role="heading"][aria-level="2"]', confidence: 0.8, strategy: 'heading' },
+      { selector: '[data-testid*="Name"]', confidence: 0.7, strategy: 'wildcard-name' }
+    ],
+
+    profileFollowLinks: [
+      { selector: 'a[href$="/following"], a[href$="/followers"], a[href$="/verified_followers"]', confidence: 1.0, strategy: 'primary' },
+      { selector: 'a[href*="/follow"]', confidence: 0.8, strategy: 'partial-href' },
+      { selector: '[role="link"][href*="follow"]', confidence: 0.7, strategy: 'role-link' }
+    ],
+
+    bookmark: [
+      { selector: '[data-testid="bookmark"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="removeBookmark"]', confidence: 0.9, strategy: 'remove-bookmark' },
+      { selector: '[aria-label*="Bookmark"]', confidence: 0.8, strategy: 'aria-bookmark' },
+      { selector: 'article [role="group"] [role="button"]:nth-child(4)', confidence: 0.7, strategy: 'nth-button' },
+      { selector: 'button[aria-label*="Bookmark"]', confidence: 0.6, strategy: 'button-bookmark' }
+    ],
+
+    videoPlayer: [
+      { selector: '[data-testid="videoPlayer"], [data-testid="videoComponent"], video', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="video"]', confidence: 0.9, strategy: 'wildcard-video' },
+      { selector: 'article video', confidence: 0.8, strategy: 'article-video' },
+      { selector: '[aria-label*="video" i]', confidence: 0.7, strategy: 'aria-video' }
+    ],
+
+    gifIndicator: [
+      { selector: '[data-testid="gifPlayer"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="gif"]', confidence: 0.9, strategy: 'wildcard-gif' },
+      { selector: '[aria-label*="GIF"]', confidence: 0.8, strategy: 'aria-gif' }
+    ],
+
+    communityNote: [
+      { selector: '[data-testid="birdwatch-pivot"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="birdwatch"]', confidence: 0.9, strategy: 'wildcard-birdwatch' },
+      { selector: '[aria-label*="community note" i]', confidence: 0.8, strategy: 'aria-note' },
+      { selector: '[data-testid*="community"]', confidence: 0.7, strategy: 'wildcard-community' }
+    ],
+
+    poll: [
+      { selector: '[data-testid="cardPoll"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="poll"]', confidence: 0.9, strategy: 'wildcard-poll' },
+      { selector: '[role="listbox"]', confidence: 0.7, strategy: 'listbox' }
+    ],
+
+    showMore: [
+      { selector: '[data-testid="tweet-text-show-more-link"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="show-more"]', confidence: 0.9, strategy: 'wildcard-show-more' },
+      { selector: 'a[role="link"][href*="/status/"]', confidence: 0.7, strategy: 'status-link' }
+    ],
+
+    sensitiveWarning: [
+      { selector: '[data-testid="tweet-text-sensitive-warning"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="sensitive"]', confidence: 0.9, strategy: 'wildcard-sensitive' }
+    ],
+
+    timestamp: [
+      { selector: 'time', confidence: 1.0, strategy: 'primary' },
+      { selector: 'time[datetime]', confidence: 0.9, strategy: 'datetime-attr' },
+      { selector: '[data-testid*="time"]', confidence: 0.7, strategy: 'wildcard-time' }
+    ],
+
+    replySortTab: [
+      { selector: '[role="tab"][aria-selected="true"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[role="tablist"] [aria-selected="true"]', confidence: 0.9, strategy: 'tablist-selected' },
+      { selector: '[data-testid*="tab"][aria-selected="true"]', confidence: 0.8, strategy: 'testid-tab' }
+    ],
+
+    primaryColumn: [
+      { selector: '[data-testid="primaryColumn"]', confidence: 1.0, strategy: 'primary' },
+      { selector: 'main[role="main"]', confidence: 0.8, strategy: 'main-role' },
+      { selector: '[data-testid*="column"]', confidence: 0.7, strategy: 'wildcard-column' }
     ]
   };
 
@@ -283,19 +359,14 @@
     },
 
     /**
-     * Load stats from chrome storage
+     * Load stats from chrome storage (sync-compatible: just initializes empty).
+     * The async chrome.storage.local.get cannot complete before the IIFE
+     * finishes extraction, so health stats are session-scoped per extraction.
+     * Accumulated stats are persisted on write and read by the popup.
      */
     loadStats: function() {
-      try {
-        chrome.storage.local.get(['selectorHealth', 'lastHealthUpdate'], (result) => {
-          if (result.selectorHealth) {
-            this.stats = result.selectorHealth;
-          }
-          this.lastValidation = result.lastHealthUpdate;
-        });
-      } catch (e) {
-        // Silent fail
-      }
+      this.stats = {};
+      this.lastValidation = null;
     },
 
     /**
@@ -531,102 +602,93 @@
   // =========================================================================
 
   /**
-   * Enhanced querySelector that tries multiple strategies and fallbacks
+   * Core resilient query engine. Tries primary → fallbacks → self-healing.
+   * Returns { elements: Element[], usedFallback: boolean, usedSelfHealing: boolean }
    */
-  function resilientQuerySelector(context, selectorKey, options = {}) {
-    const {
-      expectedContent = null,
-      maxAttempts = 5,
-      requireUnique = false,
-      healthTracking = true
-    } = options;
+  function _resilientQuery(context, selectorKey, options = {}) {
+    const { expectedContent = null, maxAttempts = 5 } = options;
+    const result = { elements: [], usedFallback: false, usedSelfHealing: false };
 
-    // Start with primary selector
+    // 1. Try primary selector from SELECTORS
     const primarySelector = SELECTORS[selectorKey];
     if (primarySelector) {
       try {
-        const elements = context.querySelectorAll(primarySelector);
-        const success = elements.length > 0 && (!requireUnique || elements.length === 1);
-
-        if (healthTracking) {
-          SELECTOR_HEALTH.recordUsage(selectorKey, primarySelector, success, 1.0);
-        }
-
-        if (success) {
-          return requireUnique ? elements[0] : elements;
+        const found = Array.from(context.querySelectorAll(primarySelector));
+        SELECTOR_HEALTH.recordUsage(selectorKey, primarySelector, found.length > 0, 1.0);
+        if (found.length > 0) {
+          EXTRACTION_TELEMETRY.currentSession.selectorsUsed.add(selectorKey);
+          result.elements = found;
+          return result;
         }
       } catch (e) {
-        if (healthTracking) {
-          SELECTOR_HEALTH.recordUsage(selectorKey, primarySelector, false, 1.0);
-        }
+        SELECTOR_HEALTH.recordUsage(selectorKey, primarySelector, false, 1.0);
       }
     }
 
-    // Try fallbacks from SELECTOR_FALLBACKS
+    // 2. Try fallbacks from SELECTOR_FALLBACKS (skip first entry if same as primary)
     const fallbacks = SELECTOR_FALLBACKS[selectorKey] || [];
     for (const fallback of fallbacks.slice(0, maxAttempts)) {
+      if (fallback.selector === primarySelector) continue;
       try {
-        const elements = context.querySelectorAll(fallback.selector);
-        const success = elements.length > 0 && (!requireUnique || elements.length === 1);
-
-        if (healthTracking) {
-          SELECTOR_HEALTH.recordUsage(selectorKey, fallback.selector, success, fallback.confidence);
-        }
-
-        if (success) {
-          return requireUnique ? elements[0] : elements;
+        const found = Array.from(context.querySelectorAll(fallback.selector));
+        SELECTOR_HEALTH.recordUsage(selectorKey, fallback.selector, found.length > 0, fallback.confidence);
+        if (found.length > 0) {
+          result.elements = found;
+          result.usedFallback = true;
+          EXTRACTION_TELEMETRY.currentSession.fallbacksTriggered++;
+          EXTRACTION_TELEMETRY.currentSession.selectorsUsed.add(selectorKey);
+          return result;
         }
       } catch (e) {
-        if (healthTracking) {
-          SELECTOR_HEALTH.recordUsage(selectorKey, fallback.selector, false, fallback.confidence);
-        }
+        SELECTOR_HEALTH.recordUsage(selectorKey, fallback.selector, false, fallback.confidence);
       }
     }
 
-    // If all fallbacks failed, try self-healing detection
-    if (expectedContent || !requireUnique) {
+    // 3. Self-healing: analyze DOM for alternatives
+    try {
       const alternatives = SELF_HEALING_DETECTOR.analyzeDOMForAlternatives(
-        selectorKey,
-        context,
-        expectedContent
+        selectorKey, context, expectedContent
       );
-
-      for (const alt of alternatives.slice(0, 3)) { // Try top 3 alternatives
+      for (const alt of alternatives.slice(0, 3)) {
         try {
           const confidence = SELF_HEALING_DETECTOR.testSelector(alt.selector, context);
-          if (confidence >= 0.5) { // Minimum confidence threshold
-            const elements = context.querySelectorAll(alt.selector);
-            const success = elements.length > 0 && (!requireUnique || elements.length === 1);
-
-            if (healthTracking) {
-              SELECTOR_HEALTH.recordUsage(selectorKey, alt.selector, success, confidence, alt);
-            }
-
-            if (success) {
-              return requireUnique ? elements[0] : elements;
+          if (confidence >= 0.5) {
+            const found = Array.from(context.querySelectorAll(alt.selector));
+            SELECTOR_HEALTH.recordUsage(selectorKey, alt.selector, found.length > 0, confidence, alt);
+            if (found.length > 0) {
+              result.elements = found;
+              result.usedFallback = true;
+              result.usedSelfHealing = true;
+              EXTRACTION_TELEMETRY.currentSession.selfHealingUsed++;
+              EXTRACTION_TELEMETRY.currentSession.selectorsUsed.add(selectorKey);
+              return result;
             }
           }
         } catch (e) {
           // Continue to next alternative
         }
       }
+    } catch (e) {
+      // Self-healing failed entirely — not critical
     }
 
-    return null; // All strategies failed
+    return result; // Empty elements array
   }
 
   /**
-   * Enhanced querySelectorAll with resilience
+   * Resilient querySelectorAll — always returns an array (never null).
    */
   function resilientQuerySelectorAll(context, selectorKey, options = {}) {
-    return resilientQuerySelector(context, selectorKey, { ...options, requireUnique: false });
+    const { elements } = _resilientQuery(context, selectorKey, options);
+    return elements;
   }
 
   /**
-   * Enhanced querySelector (single element) with resilience
+   * Resilient querySelector for a single element — returns Element or null.
    */
   function resilientQuerySelectorSingle(context, selectorKey, options = {}) {
-    return resilientQuerySelector(context, selectorKey, { ...options, requireUnique: true });
+    const { elements } = _resilientQuery(context, selectorKey, options);
+    return elements.length > 0 ? elements[0] : null;
   }
 
   // =========================================================================
@@ -858,9 +920,9 @@
       }
 
       // --- REPLY-TO ---
-      // Look for "Replying to @handle" pattern
-      const replyingTo = resilientQuerySelectorAll(tweetEl, 'replyingTo') || qsa(tweetEl, 'a[href]');
-      for (const a of replyingTo) {
+      // Look for "Replying to @handle" pattern in links within the tweet
+      const replyLinks = qsa(tweetEl, 'a[href]');
+      for (const a of replyLinks) {
         const parent = a.parentElement;
         if (parent && /replying to/i.test(parent.textContent || '')) {
           const href = a.getAttribute('href') || '';
@@ -883,11 +945,12 @@
       }
 
       // --- IMAGES ---
-      let photoEls = resilientQuerySelectorAll(tweetEl, 'tweetPhoto');
-      if (!photoEls || photoEls.length === 0) {
-        photoEls = qsa(tweetEl, 'img[src*="pbs.twimg.com/media"]');
-      } else {
+      const photoContainers = resilientQuerySelectorAll(tweetEl, 'tweetPhoto');
+      let photoEls;
+      if (photoContainers.length > 0) {
         photoEls = qsa(tweetEl, SELECTORS.tweetPhoto + ' img');
+      } else {
+        photoEls = qsa(tweetEl, 'img[src*="pbs.twimg.com/media"]');
       }
       for (const img of photoEls) {
         const src = img.getAttribute('src') || '';
@@ -1098,7 +1161,7 @@
   function extractPostPage() {
     try {
       const tweetEls = resilientQuerySelectorAll(document, 'tweet');
-      if (tweetEls.length === 0) {
+      if (!tweetEls || tweetEls.length === 0) {
         return { error: 'No tweets found on this page' };
       }
 
@@ -1212,7 +1275,7 @@
       }
 
       // Follower/following counts
-      const followLinks = resilientQuerySelectorAll(document, 'profileFollowLinks');
+      const followLinks = resilientQuerySelectorAll(document, 'profileFollowLinks') || [];
       for (const link of followLinks) {
         const href = link.getAttribute('href') || '';
         const countSpan = qs(link, 'span span');
@@ -2400,14 +2463,23 @@
     },
 
     /**
-     * Record extraction completion
+     * Record extraction completion and persist telemetry for popup
      */
     recordExtractionComplete: function(pageType, extractedData, qualityScore) {
       this.currentSession.pageType = pageType;
       this.currentSession.extractionQuality = qualityScore;
 
-      // Generate and store health report
       const healthReport = this.generateHealthReport(extractedData);
+
+      // Determine health level to persist for popup
+      const session = this.currentSession;
+      let healthLevel = 'healthy';
+      if (qualityScore < 0.5 || session.selfHealingUsed > 10) {
+        healthLevel = 'needs_attention';
+      } else if (qualityScore < 0.8 || session.fallbacksTriggered > 5 || session.selfHealingUsed > 3) {
+        healthLevel = 'monitoring';
+      }
+      healthReport.healthLevel = healthLevel;
 
       try {
         chrome.storage.local.set({
@@ -2416,7 +2488,7 @@
           'extractionQuality': qualityScore
         });
       } catch (e) {
-        // Silent fail
+        // Silent fail — telemetry is non-critical
       }
     },
 
@@ -2497,23 +2569,11 @@
     },
 
     /**
-     * Check for DOM structure changes since last validation
+     * Check for DOM structure changes since last validation.
+     * Called during extraction to piggyback validation without extra overhead.
      */
     detectChanges: function() {
-      // This would compare current DOM structure to baseline
-      // For now, just run validation
       return this.validateSelectors();
-    },
-
-    /**
-     * Schedule periodic validation (runs on extension startup)
-     */
-    scheduleValidation: function() {
-      // Run initial validation
-      setTimeout(() => this.validateSelectors(), 5000); // 5 second delay
-
-      // Schedule future validations
-      setInterval(() => this.validateSelectors(), this.validationInterval);
     }
   };
 
@@ -2587,10 +2647,6 @@
     }
   };
 
-  // Initialize monitoring systems
-  DOM_CHANGE_MONITOR.scheduleValidation();
-  COMMUNITY_CONTRIBUTIONS.validateSubmissions();
-
   // =========================================================================
   // MAIN — Execute extraction and return result
   // =========================================================================
@@ -2625,6 +2681,9 @@
       };
     }
 
+    // Piggyback selector validation on this extraction
+    DOM_CHANGE_MONITOR.validateSelectors();
+
     const payload = buildPayload(pageType, url, extractedData);
 
     // Generate all three formats from canonical payload
@@ -2644,15 +2703,29 @@
 
     // Calculate extraction quality score
     let qualityScore = 1.0;
-    if (pageType === 'post' && extractedData.mainPost) {
-      qualityScore = EXTRACTION_TELEMETRY.calculateTweetQuality(extractedData.mainPost);
+    const allTweets = pageType === 'post'
+      ? [extractedData.mainPost, ...(extractedData.replies || [])].filter(Boolean)
+      : (extractedData.posts || []);
+
+    if (allTweets.length > 0) {
+      const scores = allTweets.map(t => EXTRACTION_TELEMETRY.calculateTweetQuality(t));
+      qualityScore = scores.reduce((a, b) => a + b, 0) / scores.length;
     }
 
     // Record extraction completion with telemetry
     EXTRACTION_TELEMETRY.recordExtractionComplete(pageType, extractedData, qualityScore);
 
-    // Get current system health
-    const systemHealth = SELECTOR_HEALTH.getSystemHealth();
+    // Compute system health from this session's telemetry
+    const session = EXTRACTION_TELEMETRY.currentSession;
+    const systemHealth = qualityScore;
+
+    // Determine health level for popup display
+    let healthLevel = 'healthy';
+    if (qualityScore < 0.5 || session.selfHealingUsed > 10) {
+      healthLevel = 'needs_attention';
+    } else if (qualityScore < 0.8 || session.fallbacksTriggered > 5 || session.selfHealingUsed > 3) {
+      healthLevel = 'monitoring';
+    }
 
     return {
       success: true,
@@ -2670,10 +2743,12 @@
       payload: payload,
       telemetry: {
         systemHealth: systemHealth,
+        healthLevel: healthLevel,
         extractionQuality: qualityScore,
-        selectorsUsed: Array.from(EXTRACTION_TELEMETRY.currentSession.selectorsUsed),
-        fallbacksTriggered: EXTRACTION_TELEMETRY.currentSession.fallbacksTriggered,
-        selfHealingUsed: EXTRACTION_TELEMETRY.currentSession.selfHealingUsed
+        selectorsUsed: Array.from(session.selectorsUsed),
+        fallbacksTriggered: session.fallbacksTriggered,
+        selfHealingUsed: session.selfHealingUsed,
+        errors: session.errors
       }
     };
   } catch (error) {
@@ -2689,8 +2764,12 @@
       error: 'extraction_failed',
       message: 'Extraction failed — try refreshing the page and packaging again',
       telemetry: {
-        systemHealth: SELECTOR_HEALTH.getSystemHealth(),
-        error: error.message
+        systemHealth: 0,
+        healthLevel: 'needs_attention',
+        extractionQuality: 0,
+        error: error.message,
+        fallbacksTriggered: EXTRACTION_TELEMETRY.currentSession.fallbacksTriggered,
+        selfHealingUsed: EXTRACTION_TELEMETRY.currentSession.selfHealingUsed
       }
     };
   }

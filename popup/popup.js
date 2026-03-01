@@ -75,40 +75,30 @@
   async function updateHealthIndicators(telemetry) {
     if (!healthIndicator || !telemetry) return;
 
-    const systemHealth = telemetry.systemHealth || 1.0;
     const fallbackCount = telemetry.fallbacksTriggered || 0;
     const selfHealingCount = telemetry.selfHealingUsed || 0;
+    const level = telemetry.healthLevel || 'healthy';
 
-    // Determine health level
-    let healthLevel = 'green';
-    let healthText = 'Healthy';
+    const levelMap = {
+      'healthy':        { dot: 'green',  text: 'Healthy' },
+      'monitoring':     { dot: 'yellow', text: 'Monitoring' },
+      'needs_attention': { dot: 'red',   text: 'Needs Attention' }
+    };
+    const display = levelMap[level] || levelMap['healthy'];
 
-    if (systemHealth < 0.5 || selfHealingCount > 10) {
-      healthLevel = 'red';
-      healthText = 'Needs Attention';
-    } else if (systemHealth < 0.8 || fallbackCount > 5 || selfHealingCount > 3) {
-      healthLevel = 'yellow';
-      healthText = 'Monitoring';
-    }
+    healthDot.className = `health-dot ${display.dot}`;
+    healthLabel.textContent = `System Health: ${display.text}`;
 
-    // Update UI
-    healthDot.className = `health-dot ${healthLevel}`;
-    healthLabel.textContent = `System Health: ${healthText}`;
-
-    // Show issues if any
     const issues = [];
     if (fallbackCount > 0) {
-      issues.push(`${fallbackCount} selector fallback${fallbackCount > 1 ? 's' : ''} used`);
+      issues.push(`${fallbackCount} fallback${fallbackCount > 1 ? 's' : ''} used`);
     }
     if (selfHealingCount > 0) {
-      issues.push(`${selfHealingCount} self-healing operation${selfHealingCount > 1 ? 's' : ''} performed`);
-    }
-    if (systemHealth < 0.8) {
-      issues.push(`System health: ${Math.round(systemHealth * 100)}%`);
+      issues.push(`${selfHealingCount} self-healing op${selfHealingCount > 1 ? 's' : ''}`);
     }
 
     if (issues.length > 0) {
-      healthIssues.textContent = issues.join(' • ');
+      healthIssues.textContent = issues.join(' · ');
       healthIssues.classList.remove('hidden');
     } else {
       healthIssues.classList.add('hidden');
@@ -117,20 +107,19 @@
     healthIndicator.classList.remove('hidden');
   }
 
-  // Load and show current health status
   async function loadHealthStatus() {
     try {
       const result = await chrome.storage.local.get(['lastHealthReport', 'extractionQuality']);
       if (result.lastHealthReport) {
-        const telemetry = {
-          systemHealth: result.lastHealthReport.systemHealth || 1.0,
-          fallbacksTriggered: result.lastHealthReport.sessionStats?.fallbacksTriggered || 0,
-          selfHealingUsed: result.lastHealthReport.sessionStats?.selfHealingUsed || 0
-        };
-        updateHealthIndicators(telemetry);
+        const report = result.lastHealthReport;
+        updateHealthIndicators({
+          healthLevel: report.healthLevel || 'healthy',
+          fallbacksTriggered: report.sessionStats?.fallbacksTriggered || 0,
+          selfHealingUsed: report.sessionStats?.selfHealingUsed || 0
+        });
       }
     } catch (e) {
-      // Silent fail - health monitoring is nice-to-have
+      // Silent fail — health monitoring is nice-to-have
     }
   }
 
