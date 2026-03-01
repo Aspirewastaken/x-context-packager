@@ -1221,40 +1221,351 @@
   /**
    * Format 2: Markdown
    */
+  // =========================================================================
+  // INTELLIGENT MARKDOWN FORMATTING — Self-Deciding Structure
+  // =========================================================================
+
+  /**
+   * Academic Structure: Formal analysis with citations and sections
+   */
+  function formatAcademicStructure(payload, lines, options, analysis) {
+    // Abstract/Overview
+    lines.push('## Abstract');
+    lines.push(`This analysis examines a social media discussion thread from X.com, containing ${payload.meta.totalTweets} posts with ${payload.meta.totalReplies || 0} reply interactions. The conversation ${analysis.analysis.hasQuestions ? 'explores research questions' : 'discusses topics'} in a ${analysis.analysis.isDebate ? 'debate-oriented' : 'conversational'} manner.`);
+    lines.push('');
+
+    // Main Post as Primary Source
+    if (payload.mainPost) {
+      lines.push('## Primary Source');
+      lines.push('**Original Post**');
+      lines.push(`> ${payload.mainPost.text || 'No text content'}`);
+      lines.push('');
+      lines.push(`**Author:** ${payload.mainPost.author?.handle || 'Unknown'} (${payload.mainPost.author?.name || 'Unknown'})`);
+      lines.push(`**Timestamp:** ${payload.mainPost.timestamp?.display || 'Unknown'}`);
+      lines.push(`**Engagement:** ${payload.mainPost.engagement?.likes || 0} likes, ${payload.mainPost.engagement?.retweets || 0} reposts, ${payload.mainPost.engagement?.replies || 0} replies`);
+      lines.push('');
+    }
+
+    // Discussion Analysis
+    if (payload.replies && payload.replies.length > 0) {
+      lines.push('## Discussion Analysis');
+
+      // Group replies by depth/thread
+      const threads = {};
+      payload.replies.forEach((reply, index) => {
+        const depth = reply.threading?.depth || 0;
+        if (!threads[depth]) threads[depth] = [];
+        threads[depth].push({ reply, index });
+      });
+
+      Object.keys(threads).sort((a, b) => parseInt(a) - parseInt(b)).forEach(depth => {
+        const level = parseInt(depth);
+        const title = level === 0 ? 'Direct Responses' : `Thread Level ${level}`;
+        lines.push(`### ${title}`);
+        lines.push('');
+
+        threads[depth].forEach(({ reply, index }) => {
+          lines.push(`#### Response ${index + 1}`);
+          lines.push(`**${reply.author?.handle || 'Unknown'}:** ${reply.text || 'No text content'}`);
+          if (reply.timestamp?.display) {
+            lines.push(`*Posted: ${reply.timestamp.display}*`);
+          }
+          lines.push('');
+        });
+      });
+    }
+
+    // Methodology
+    lines.push('## Methodology');
+    lines.push('This analysis was generated using X Context Packager v1.0.0 by AdLab, an open-source tool designed for transparent extraction of social media context for research purposes.');
+    lines.push('');
+  }
+
+  /**
+   * Q&A Structure: Question-answer format with threaded discussions
+   */
+  function formatQAStructure(payload, lines, options, analysis) {
+    if (payload.mainPost) {
+      // Check if main post contains questions
+      const mainText = payload.mainPost.text || '';
+      const hasQuestion = /\?/.test(mainText);
+
+      if (hasQuestion) {
+        lines.push('## Original Question');
+        lines.push(`**Q:** ${mainText}`);
+        lines.push(`*Asked by ${payload.mainPost.author?.handle || 'Unknown'} on ${payload.mainPost.timestamp?.display || 'Unknown'}*`);
+        lines.push('');
+      } else {
+        lines.push('## Discussion Thread');
+        lines.push(`**Topic:** ${mainText.substring(0, 100)}${mainText.length > 100 ? '...' : ''}`);
+        lines.push(`*Started by ${payload.mainPost.author?.handle || 'Unknown'} on ${payload.mainPost.timestamp?.display || 'Unknown'}*`);
+        lines.push('');
+      }
+    }
+
+    // Answers and follow-ups
+    if (payload.replies && payload.replies.length > 0) {
+      lines.push('## Answers & Discussion');
+
+      payload.replies.forEach((reply, index) => {
+        const isTopLevel = reply.threading?.depth === 1;
+        const prefix = isTopLevel ? 'A' : '↳';
+
+        lines.push(`### ${prefix}${index + 1}: ${reply.author?.handle || 'Unknown'}`);
+        lines.push(`${reply.text || 'No text content'}`);
+        lines.push(`*${reply.timestamp?.display || 'Unknown'} · ${reply.engagement?.likes || 0} likes*`);
+        lines.push('');
+      });
+    }
+  }
+
+  /**
+   * Chat Structure: Conversational log format
+   */
+  function formatChatStructure(payload, lines, options, analysis) {
+    lines.push('## Conversation Log');
+    lines.push('');
+
+    // Main post as conversation start
+    if (payload.mainPost) {
+      const time = payload.mainPost.timestamp?.display || 'Unknown time';
+      lines.push(`[${time}] **${payload.mainPost.author?.handle || 'Unknown'}**`);
+      lines.push(`${payload.mainPost.text || 'No message'}`);
+      lines.push('');
+    }
+
+    // Replies as conversation continuation
+    if (payload.replies && payload.replies.length > 0) {
+      payload.replies.forEach(reply => {
+        const time = reply.timestamp?.display || 'Unknown time';
+        const indent = '  '.repeat(reply.threading?.depth || 0);
+        lines.push(`${indent}[${time}] **${reply.author?.handle || 'Unknown'}**`);
+        lines.push(`${indent}${reply.text || 'No message'}`);
+        lines.push('');
+      });
+    }
+
+    lines.push('---');
+    lines.push(`*Conversation ended. ${payload.replies?.length || 0} replies total.*`);
+  }
+
+  /**
+   * Technical Structure: Documentation format with code emphasis
+   */
+  function formatTechnicalStructure(payload, lines, options, analysis) {
+    lines.push('## Technical Discussion');
+
+    if (payload.mainPost) {
+      lines.push('### Problem Statement');
+      lines.push(`${payload.mainPost.text || 'No description provided'}`);
+      lines.push('');
+      lines.push(`**Posted by:** ${payload.mainPost.author?.handle || 'Unknown'}`);
+      lines.push(`**Date:** ${payload.mainPost.timestamp?.display || 'Unknown'}`);
+      lines.push('');
+    }
+
+    if (payload.replies && payload.replies.length > 0) {
+      lines.push('### Solutions & Discussion');
+
+      // Group by technical themes if possible
+      const technicalReplies = payload.replies.filter(reply =>
+        reply.text && (reply.text.includes('```') || /function|class|api|code|solution/i.test(reply.text))
+      );
+
+      if (technicalReplies.length > 0) {
+        lines.push('#### Code Solutions');
+        technicalReplies.forEach((reply, index) => {
+          lines.push(`**Solution ${index + 1}** by ${reply.author?.handle || 'Unknown'}:`);
+          lines.push(`${reply.text}`);
+          lines.push('');
+        });
+      }
+
+      // Other technical discussion
+      const discussionReplies = payload.replies.filter(reply =>
+        !technicalReplies.includes(reply)
+      );
+
+      if (discussionReplies.length > 0) {
+        lines.push('#### Technical Discussion');
+        discussionReplies.forEach(reply => {
+          lines.push(`- **${reply.author?.handle || 'Unknown'}:** ${reply.text || 'No content'}`);
+        });
+        lines.push('');
+      }
+    }
+
+    // API/Technical references
+    const links = [];
+    if (payload.mainPost?.links) links.push(...payload.mainPost.links);
+    if (payload.replies) {
+      payload.replies.forEach(reply => {
+        if (reply.links) links.push(...reply.links);
+      });
+    }
+
+    if (links.length > 0) {
+      lines.push('### References');
+      links.forEach(link => {
+        lines.push(`- [${link.display}](${link.url})`);
+      });
+      lines.push('');
+    }
+  }
+
+  /**
+   * Narrative Structure: Story-like chronological format
+   */
+  function formatNarrativeStructure(payload, lines, options, analysis) {
+    lines.push('## The Story');
+
+    if (payload.mainPost) {
+      lines.push('### The Beginning');
+      lines.push(`It started when ${payload.mainPost.author?.name || 'someone'} posted:`);
+      lines.push('');
+      lines.push(`> "${payload.mainPost.text || 'No story to tell'}"`);
+      lines.push('');
+      lines.push(`This was on ${payload.mainPost.timestamp?.display || 'a quiet day'}.`);
+      lines.push('');
+    }
+
+    if (payload.replies && payload.replies.length > 0) {
+      lines.push('### What Happened Next');
+
+      // Sort by time if available
+      const sortedReplies = [...payload.replies].sort((a, b) => {
+        const timeA = new Date(a.timestamp?.iso || 0);
+        const timeB = new Date(b.timestamp?.iso || 0);
+        return timeA - timeB;
+      });
+
+      sortedReplies.forEach((reply, index) => {
+        const character = reply.author?.name || reply.author?.handle || 'Someone';
+        const action = reply.threading?.replyTo ? ` replied to ${reply.threading.replyTo}` : ' joined the conversation';
+
+        lines.push(`**${character}**${action}:`);
+        lines.push(`"${reply.text || '...'}"`);
+        lines.push('');
+      });
+
+      lines.push('### The End');
+      lines.push(`And so the story concluded, with ${payload.replies.length} voices contributing to the narrative.`);
+      lines.push('');
+    }
+  }
+
+  /**
+   * Analyzes content and determines optimal markdown structure
+   * Uses meta-prompting logic: debates multiple format options and selects truth
+   */
+  function analyzeContentForOptimalStructure(payload) {
+    const content = {
+      hasQuestions: false,
+      hasCodeBlocks: false,
+      hasLongThreads: false,
+      hasTechnicalContent: false,
+      hasAcademicTone: false,
+      hasConversationalTone: false,
+      isDebate: false,
+      hasPolls: false,
+      hasMedia: false,
+      isProfilePage: payload.meta.pageType === 'profile'
+    };
+
+    // Analyze all text content
+    const allText = [];
+    if (payload.mainPost) allText.push(payload.mainPost.text || '');
+    if (payload.replies) payload.replies.forEach(r => allText.push(r.text || ''));
+    if (payload.posts) payload.posts.forEach(p => allText.push(p.text || ''));
+    const fullText = allText.join(' ').toLowerCase();
+
+    // Content analysis
+    content.hasQuestions = /\?/.test(fullText) && fullText.split('?').length > 3;
+    content.hasCodeBlocks = /```|`[^`]+`|function|class|import|const|let|var/.test(fullText);
+    content.hasLongThreads = payload.replies && payload.replies.length > 20;
+    content.hasTechnicalContent = /(api|algorithm|framework|library|protocol|database|server|client|http|json|xml)/.test(fullText);
+    content.hasAcademicTone = /(research|study|analysis|methodology|hypothesis|conclusion|literature)/.test(fullText);
+    content.isDebate = /(however|but|actually|wrong|agree|disagree|counterpoint|alternative)/.test(fullText);
+    content.hasPolls = payload.replies && payload.replies.some(r => r.poll);
+    content.hasMedia = payload.meta.totalImages > 0 || (payload.replies && payload.replies.some(r => r.video || r.gif));
+
+    // Meta-prompting logic: debate format options
+    const formatOptions = [
+      {
+        name: 'academic',
+        score: (content.hasAcademicTone ? 3 : 0) + (content.hasLongThreads ? 2 : 0) + (content.hasQuestions ? 1 : 0),
+        structure: 'Academic paper style with citations, sections, and formal analysis'
+      },
+      {
+        name: 'qa',
+        score: (content.hasQuestions ? 3 : 0) + (content.isDebate ? 2 : 0) + (content.hasLongThreads ? 1 : 0),
+        structure: 'Q&A format with threaded discussions and answer hierarchies'
+      },
+      {
+        name: 'chat',
+        score: (content.isDebate ? 2 : 0) + (content.hasConversationalTone ? 3 : 0) + (!content.hasLongThreads ? 2 : 0),
+        structure: 'Chat log style with timestamps and conversational flow'
+      },
+      {
+        name: 'technical',
+        score: (content.hasTechnicalContent ? 3 : 0) + (content.hasCodeBlocks ? 3 : 0) + (content.hasMedia ? 1 : 0),
+        structure: 'Technical documentation with code blocks, API references, and structured examples'
+      },
+      {
+        name: 'narrative',
+        score: (!content.hasQuestions && !content.hasTechnicalContent && !content.hasAcademicTone ? 3 : 0) + (content.hasLongThreads ? 1 : 0),
+        structure: 'Narrative story format with chronological flow and character development'
+      }
+    ];
+
+    // Select highest scoring format, with stability tiebreaker
+    formatOptions.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    const optimalFormat = formatOptions[0];
+
+    return {
+      format: optimalFormat.name,
+      score: optimalFormat.score,
+      structure: optimalFormat.structure,
+      analysis: content
+    };
+  }
+
   function formatMarkdown(payload, options = {}) {
+    // First, analyze content to determine optimal structure
+    const structureAnalysis = analyzeContentForOptimalStructure(payload);
+
     const lines = [];
 
-    lines.push('# X.com Post Context');
+    // Header adapts based on format
+    const formatTitles = {
+      academic: 'X.com Discussion Analysis',
+      qa: 'X.com Q&A Thread',
+      chat: 'X.com Conversation Log',
+      technical: 'X.com Technical Discussion',
+      narrative: 'X.com Story Thread'
+    };
+
+    lines.push(`# ${formatTitles[structureAnalysis.format] || 'X.com Post Context'}`);
     lines.push(`**URL:** ${payload.meta.url}`);
     lines.push(`**Extracted:** ${payload.meta.extractedAt} | ${payload.meta.totalTweets} tweets | ${payload.meta.totalLinks} links | ${payload.meta.totalImages} images | ~${payload.meta.estimatedTokens} tokens`);
     lines.push(`**Tool:** ${payload.meta.tool}`);
+    lines.push(`**Format:** ${structureAnalysis.structure}`);
     lines.push('');
     lines.push('---');
     lines.push('');
 
     if (payload.meta.pageType === 'post') {
-      if (payload.mainPost) {
-        lines.push('## MAIN POST');
-        lines.push(formatTweetMarkdown(payload.mainPost, '', options));
-        lines.push('');
-        lines.push('---');
-        lines.push('');
-      }
-
-      if (payload.replies.length > 0) {
-        lines.push(`## REPLIES (${payload.replies.length})`);
-        lines.push('');
-        for (let i = 0; i < payload.replies.length; i++) {
-          const r = payload.replies[i];
-          const depthStr = r.threading.depth > 1 ? ` [depth: ${r.threading.depth}]` : '';
-          const opStr = r.threading.isOp ? ' (OP)' : '';
-          const timeLabel = options.includeTimestamps !== false ? ` · ${r.timestamp.display ?? 'null'}` : '';
-          lines.push(`### ${i + 1}. ${r.author.handle ?? 'null'}${opStr}${timeLabel}${depthStr}`);
-          lines.push(formatTweetMarkdown(r, '', options));
-          lines.push('');
-        }
-        lines.push('---');
-        lines.push('');
+      // Use intelligent structure-specific formatting
+      if (structureAnalysis.format === 'academic') {
+        formatAcademicStructure(payload, lines, options, structureAnalysis);
+      } else if (structureAnalysis.format === 'qa') {
+        formatQAStructure(payload, lines, options, structureAnalysis);
+      } else if (structureAnalysis.format === 'chat') {
+        formatChatStructure(payload, lines, options, structureAnalysis);
+      } else if (structureAnalysis.format === 'technical') {
+        formatTechnicalStructure(payload, lines, options, structureAnalysis);
+      } else {
+        formatNarrativeStructure(payload, lines, options, structureAnalysis);
       }
 
     } else if (payload.meta.pageType === 'profile') {
