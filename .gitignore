@@ -1,0 +1,17 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (not used but just in case)
+node_modules/
+
+# Build artifacts (not used but just in case)
+dist/
+build/
