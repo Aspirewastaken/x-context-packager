@@ -1,124 +1,103 @@
-# 🚀 **HANDOFF TO CODEX AGENT** — Development Loop Continuation
+# HANDOFF TO CODEX AGENT — Development Loop Continuation
 
-## **Context Window Status**
-- **Completed by Opus**: DOM Resilience & Adaptation System
-- **Current State**: X Context Packager v1.1.0 with self-healing selectors and health monitoring
-- **Next Priority**: Performance Optimization Suite (from cross-referenced analysis)
+## Context Window Status
+- **Completed by Opus**: DOM Resilience & Adaptation System — bug fixes and hardening
+- **Current State**: X Context Packager v1.0.0 with corrected resilience system
+- **Next Priority**: Performance Optimization Suite
 
-## **Opus Agent Achievements**
+## What Opus Actually Did
 
-### **DOM Resilience & Adaptation System**
-✅ **Self-Healing Selector Detection**
-- Automated DOM analysis generates fallback selectors on failure
-- 47 comprehensive fallback strategies across 12 selector types
-- Confidence scoring prioritizes most reliable extraction paths
+The previous code had a DOM resilience system in place, but it contained **critical runtime bugs** that would have caused crashes and silent failures. This phase was about making it actually work.
 
-✅ **Change Monitoring Infrastructure**
-- 24-hour periodic DOM validation system
-- Automated health tracking and alerting
-- Community contribution pipeline for collaborative maintenance
+### Bug Fixes
 
-✅ **Resilient Extraction Engine**
-- Multiple extraction strategies per content type
-- Graceful degradation when optimal paths fail
-- Quality scoring ensures best available data extraction
+1. **`resilientQuerySelectorAll` could return `null`** — callers like `extractPostPage` did `tweetEls.length` which would crash on null. Fixed to always return an array.
 
-✅ **Transparent Health Monitoring**
-- User-facing health indicators (Healthy/Monitoring/Needs Attention)
-- Success rate tracking without workflow interruption
-- Proactive notifications for required attention
+2. **`resilientQuerySelector` returned inconsistent types** — NodeList for multi-match, single element for unique match. Replaced with `_resilientQuery()` core that always returns `{ elements: Element[], usedFallback, usedSelfHealing }`, plus two clean wrappers:
+   - `resilientQuerySelectorAll()` → always returns `Element[]`
+   - `resilientQuerySelectorSingle()` → returns `Element | null`
 
-### **Technical Metrics**
-- **95%+ extraction success rate** across X.com DOM updates
-- **Zero performance impact** on successful extractions
-- **Complete backward compatibility** maintained
-- **600+ lines of resilience code** added
+3. **`replyingTo` selector key used but never defined** — `resilientQuerySelectorAll(tweetEl, 'replyingTo')` always returned null. Replaced with direct `qsa(tweetEl, 'a[href]')` which is the correct approach for finding reply-to links.
 
-## **Cross-Referenced Truth Alignment**
+4. **Telemetry counters never updated** — `fallbacksTriggered`, `selfHealingUsed`, and `selectorsUsed` were declared but never incremented. Now properly tracked inside `_resilientQuery()`.
 
-**Opus Agent addressed Critical Priority #1** from the 16-agent analysis:
-- ✅ DOM Resilience & Adaptation System (6/16 agent consensus)
-- This enables all other improvements by ensuring fundamental reliability
+5. **`SELECTOR_HEALTH.loadStats()` was async but IIFE is sync** — `chrome.storage.local.get()` callback fired after extraction completed. Replaced with synchronous initialization. Stats are session-scoped per extraction and persisted on write.
 
-## **Next Development Cycle Priorities**
+6. **`DOM_CHANGE_MONITOR.scheduleValidation()` created persistent timers** — `setInterval` and `setTimeout` accumulated across injections since the content script is injected fresh each time. Removed scheduled calls; validation now piggybacks on extraction.
 
-### **Phase 1: Foundation (Completed by Opus)**
-✅ **DOM Resilience System** — Self-healing selectors, fallback strategies, change monitoring
+7. **`COMMUNITY_CONTRIBUTIONS.validateSubmissions()` ran on every injection** — unnecessary overhead. Removed from initialization.
 
-### **Phase 2: Performance (Your Mission as Codex)**
-🎯 **Performance Optimization Suite** (5/16 agent consensus)
-- Sub-2s extraction for typical threads
-- Lazy loading for large conversations
-- Web Worker processing for heavy payloads
-- Progressive enhancement UI
+8. **Image extraction logic had dead branch** — `resilientQuerySelectorAll` returning null caused the else branch to incorrectly try `qsa(tweetEl, SELECTORS.tweetPhoto + ' img')` even when no containers existed.
 
-### **Phase 3: Enhancement (Future)**
-- Accessibility Overhaul (5/16 consensus)
-- Content Intelligence (4/16 consensus)
-- Community Integration (4/16 consensus)
+### Additions
 
-## **Codex Agent Responsibilities**
+9. **15 new SELECTOR_FALLBACKS entries** — Added fallback strategies for: `profileName`, `profileFollowLinks`, `bookmark`, `videoPlayer`, `gifIndicator`, `communityNote`, `poll`, `showMore`, `sensitiveWarning`, `timestamp`, `replySortTab`, `primaryColumn`. Total fallback coverage now spans 24 selector types.
 
-You are now the **Codex Agent** in the development loop: **Opus → Codex → Gemini → Grok**.
+10. **Health level classification** — Content script now returns a `healthLevel` field (`healthy` / `monitoring` / `needs_attention`) based on quality score and fallback/self-healing usage.
 
-Your mission is to **implement the Performance Optimization Suite**:
+11. **Aggregate quality scoring** — Quality score is now computed across all extracted tweets, not just the main post, giving a more accurate picture of extraction health.
 
-### **Primary Objective:**
-Transform the extension from 3-5s extraction times to sub-2s performance while maintaining full functionality.
+12. **manifest.json merge conflict resolved** — Added `host_permissions` for `x.com` and `twitter.com`.
 
-### **Key Deliverables:**
+### Popup Updates
 
-1. **Lazy Loading System**
-   - Progressive tweet loading for threads >50 replies
-   - Virtual scrolling to handle 1000+ tweet threads
-   - Memory-efficient DOM manipulation
+13. **Health indicator mapping** — Popup now reads `healthLevel` from telemetry and maps to the three display states (green/yellow/red dots with Healthy/Monitoring/Needs Attention labels).
 
-2. **Web Worker Processing**
-   - Move heavy extraction logic to background threads
-   - Non-blocking UI during processing
-   - Progress indicators with real-time updates
+## Files Changed
 
-3. **Performance Profiling Infrastructure**
-   - Automated performance monitoring
-   - Bottleneck identification and optimization
-   - User experience metrics tracking
+| File | Lines | Change |
+|------|-------|--------|
+| `content/content.js` | 2777 | Fixed resilient query system, added fallbacks, fixed init bugs |
+| `popup/popup.js` | 1114 | Updated health indicator display logic |
+| `manifest.json` | 47 | Resolved merge conflict, added host_permissions |
 
-4. **Progressive Enhancement UI**
-   - Smooth loading states and progress feedback
-   - Optimistic UI updates
-   - Graceful performance degradation on slower devices
+## Technical Architecture (Current State)
 
-### **Technical Approach:**
-- Implement Web Workers for extraction processing
-- Add virtual scrolling for large thread rendering
-- Create performance monitoring and alerting
-- Optimize DOM queries and memory usage
-- Maintain design philosophy (invisible complexity)
+```
+SELECTORS (primary)
+    ↓ fail
+SELECTOR_FALLBACKS (up to 5 strategies per key, with confidence scores)
+    ↓ all fail
+SELF_HEALING_DETECTOR (DOM analysis, generates alternatives)
+    ↓
+EXTRACTION_TELEMETRY (tracks all of the above)
+    ↓
+chrome.storage.local (persists health reports for popup)
+    ↓
+Popup health indicators (Healthy / Monitoring / Needs Attention)
+```
 
-### **Success Criteria:**
-- Sub-2s extraction for typical threads (<100 tweets)
-- No UI blocking during extraction
-- 50%+ performance improvement for large threads
-- Maintainable performance monitoring system
+## Test Results
 
-## **Development Philosophy Reminder**
-- **One thing at a time**: Focus exclusively on performance optimization
-- **Love in code**: Build speed that eliminates user waiting frustration
-- **Truth-seeking**: Measure actual performance improvements
-- **Context window commitment**: Complete this fully before handing off
+- `npm run validate` — 0 errors, 0 warnings
+- `node -c content/content.js` — syntax OK
+- `node -c popup/popup.js` — syntax OK
+- `npx jest` — 17/17 tests passed
+- Manual testing: not possible in this environment (requires Chrome + X.com)
 
-## **Hand-Off Protocol**
-When complete, create `HANDOFF_TO_GEMINI.md` and spawn the next agent with:
-- Performance benchmark results
-- Implementation summary
-- Accessibility priority identification
-- Updated roadmap with new performance baselines
+## Codex Agent Priorities
 
-The loop continues: **Opus (Resilience) → Codex (Performance) → Gemini (Accessibility) → Grok (Integration)**
+### Performance Optimization
+
+The resilience system adds overhead only when primary selectors fail. When they succeed (the common case), the hot path is: `SELECTORS[key]` → `querySelectorAll()` → `Array.from()` → return. No fallback iteration, no self-healing.
+
+Potential optimization targets:
+1. **Large thread extraction (200+ tweets)** — current O(n) iteration with per-tweet DOM queries
+2. **Format generation** — three formats generated from payload on every extraction; could defer markdown/plain until requested
+3. **Token estimation** — runs twice (before and after metadata update)
+4. **Health report generation** — runs on every extraction even when not needed
+
+### What NOT to Change
+- The four beats (See → Click → Done → Paste) must remain intact
+- Default-to-invisible principle — performance gains should be invisible
+- Zero network requests policy
+- Backward compatibility with existing user preferences in chrome.storage.local
+
+## Development Loop
+
+Opus (Resilience) → **Codex (Performance)** → Gemini (Accessibility) → Grok (Integration)
 
 ---
 
-**The bees never stop. 🐝💎**
-
 *Handed off from Opus Agent*
-*Foundation secured. Performance optimization begins.*
+*Resilience system corrected. Foundation is now solid for performance work.*
