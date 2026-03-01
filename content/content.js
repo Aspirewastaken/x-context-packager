@@ -39,7 +39,7 @@
 
     // Engagement (aria-label based)
     reply: '[data-testid="reply"]',
-    retweet: '[data-testid="retweet"]',
+    retweet: '[data-testid="retweet"], [data-testid="repost"]',
     like: '[data-testid="like"]',
     unlike: '[data-testid="unlike"]',
     bookmark: '[data-testid="bookmark"]',
@@ -800,6 +800,7 @@
    */
   function extractTweet(tweetEl, context = {}) {
     const tweet = {
+      url: null,
       author: { name: null, handle: null, verified: 'none', followers: null, following: null },
       timestamp: { iso: null, display: null },
       text: null,
@@ -884,6 +885,10 @@
       if (timeEl) {
         tweet.timestamp.iso = timeEl.getAttribute('datetime') || null;
         tweet.timestamp.display = timeEl.textContent?.trim() || null;
+        const parent = timeEl.parentElement;
+        if (parent && parent.tagName === 'A') {
+          tweet.url = parent.getAttribute('href') || null;
+        }
       }
 
       // --- TEXT ---
@@ -1113,7 +1118,7 @@
           card.domain = text;
         } else if (!card.title && text.length > 5) {
           card.title = text;
-        } else if (!card.description && text.length > card.title?.length) {
+        } else if (!card.description && text.length > (card.title ? card.title.length : 0)) {
           card.description = text;
         }
       }
@@ -1169,40 +1174,70 @@
         return { error: 'No tweets found on this page' };
       }
 
-      // First tweet is the main post
-      const mainPost = extractTweet(tweetEls[0], { depth: 0, position: 0, isOp: false });
-      const opHandle = mainPost.author.handle;
+      const currentUrl = window.location.pathname;
+      const statusMatch = currentUrl.match(/\/status\/(\d+)/);
+      const pageStatusId = statusMatch ? statusMatch[1] : null;
 
-      // Remaining are replies
+      let mainPost = null;
       const replies = [];
-      for (let i = 1; i < tweetEls.length; i++) {
-        const el = tweetEls[i];
+      let opHandle = null;
+
+      // Extract all tweets
+      const extracted = tweetEls.map((el, i) => ({
+        el,
+        tweet: extractTweet(el, { position: i })
+      }));
+
+      // Find main post
+      for (let i = 0; i < extracted.length; i++) {
+        const t = extracted[i].tweet;
+        let isMain = false;
+        
+        if (pageStatusId) {
+          if (!t.url || t.url.includes(pageStatusId)) {
+            isMain = true;
+          }
+        } else if (i === 0) {
+          isMain = true;
+        }
+
+        if (isMain && !mainPost) {
+          mainPost = t;
+          mainPost.threading.depth = 0;
+          opHandle = mainPost.author.handle;
+          extracted[i].isMain = true;
+        }
+      }
+
+      // If we didn't find a main post (e.g., scrolled past it), opHandle remains null
+      // Process replies
+      for (let i = 0; i < extracted.length; i++) {
+        if (extracted[i].isMain) continue;
+        
+        const el = extracted[i].el;
+        const reply = extracted[i].tweet;
 
         // Calculate depth from DOM structure
         let depth = 1;
-        // Look for indentation clues — thread connectors, nested reply containers
         const parentArticle = el.closest('article');
         if (parentArticle) {
-          // Count ancestor cellInnerDiv elements as proxy for nesting
           let parent = el.parentElement;
           let nestLevel = 0;
           while (parent && parent !== document.body) {
             if (parent.matches?.(SELECTORS.cellInnerDiv)) nestLevel++;
             parent = parent.parentElement;
           }
-          // Heuristic: more nesting = deeper thread
           if (nestLevel > 3) depth = 2;
           if (nestLevel > 5) depth = 3;
         }
+        
+        reply.threading.depth = depth;
 
-        // Check if reply mentions someone (reply-to context)
-        const reply = extractTweet(el, {
-          depth: depth,
-          position: i,
-          isOp: opHandle && qs(el, SELECTORS.userName)?.textContent?.includes(opHandle?.replace('@', ''))
-        });
+        // Check if reply mentions op
+        if (opHandle && qs(el, SELECTORS.userName)?.textContent?.includes(opHandle?.replace('@', ''))) {
+           // This logic is flawed anyway because userName includes author name, but let's keep original heuristic
+        }
 
-        // Override isOp based on handle comparison
         if (opHandle && reply.author.handle) {
           reply.threading.isOp = reply.author.handle.toLowerCase() === opHandle.toLowerCase();
         }
@@ -1559,6 +1594,13 @@
         for (const l of qt.links) lines.push(`${indent}    <link${xmlAttr('url', l.url)}${xmlAttr('display', l.display)}/>`);
         lines.push(`${indent}  </links>`);
       }
+      if (options.includeImages !== false && qt.images && qt.images.length > 0) {
+        lines.push(`${indent}  <images>`);
+        for (const img of qt.images) {
+          lines.push(`${indent}    <image${xmlAttr('url', img.url)}${xmlAttr('alt', img.alt)}/>`);
+        }
+        lines.push(`${indent}  </images>`);
+      }
       lines.push(`${indent}</quoted_tweet>`);
     }
 
@@ -1754,6 +1796,16 @@
     if (tweet.quotedTweet) {
       lines.push('');
       lines.push(`> **Quoted:** ${tweet.quotedTweet.author.handle ?? 'null'} — ${tweet.quotedTweet.text ?? 'null'}`);
+      if (tweet.quotedTweet.links && tweet.quotedTweet.links.length > 0) {
+        for (const l of tweet.quotedTweet.links) {
+          lines.push(`> 🔗 [${l.display}](${l.url})`);
+        }
+      }
+      if (options.includeImages !== false && tweet.quotedTweet.images && tweet.quotedTweet.images.length > 0) {
+        for (const img of tweet.quotedTweet.images) {
+          lines.push(`> 🖼️ ${img.url}${img.alt ? ' (' + img.alt + ')' : ''}`);
+        }
+      }
     }
 
     if (tweet.linkCard) {
@@ -2232,6 +2284,12 @@
 
     if (tweet.quotedTweet) {
       lines.push(`Quoted: ${tweet.quotedTweet.author.handle ?? 'null'} - ${tweet.quotedTweet.text ?? 'null'}`);
+      if (tweet.quotedTweet.links && tweet.quotedTweet.links.length > 0) {
+        lines.push(`Quoted Links: ${tweet.quotedTweet.links.map(l => l.url).join(', ')}`);
+      }
+      if (options.includeImages !== false && tweet.quotedTweet.images && tweet.quotedTweet.images.length > 0) {
+        lines.push(`Quoted Images: ${tweet.quotedTweet.images.map(i => i.url).join(', ')}`);
+      }
     }
 
     if (tweet.linkCard) {

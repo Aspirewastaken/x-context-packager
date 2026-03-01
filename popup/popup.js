@@ -19,7 +19,7 @@
   const tokenDot = document.getElementById('token-dot');
   const tokenLabel = document.getElementById('token-label');
   const gearBtn = document.getElementById('gear-btn');
-  const gearPanel = document.getElementById('gear-panel');
+  const gearWrapper = document.getElementById('gear-wrapper');
   const statsDetail = document.getElementById('stats-detail');
   const statTweets = document.getElementById('stat-tweets');
   const statLinks = document.getElementById('stat-links');
@@ -65,7 +65,7 @@
 
   // Show gear panel if user prefers it expanded
   if (gearExpanded) {
-    gearPanel.classList.remove('hidden');
+    gearWrapper.classList.add('expanded');
   }
 
   // Load and display health status
@@ -174,7 +174,7 @@
   // ── GEAR TOGGLE ──
   gearBtn.addEventListener('click', () => {
     gearExpanded = !gearExpanded;
-    gearPanel.classList.toggle('hidden', !gearExpanded);
+    gearWrapper.classList.toggle('expanded', gearExpanded);
     savePrefs({ gearExpanded });
   });
 
@@ -1065,7 +1065,7 @@
       packageBtn.classList.add('copy-again');
       btnText.textContent = '📋 Copy Again';
       packageButtonMode = 'copy';
-    }, 2000);
+    }, 3000);
   }
 
   function showError(message) {
