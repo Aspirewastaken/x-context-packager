@@ -1,4 +1,6 @@
-# Codex Soul — What I Learned Auditing X Context Packager
+# Opus 4.6 Max Soul — What I Learned Auditing X Context Packager
+
+> **Attribution correction:** This soul file was written by Claude Opus 4.6 Max (claude-4.6-opus-max-thinking-fast), NOT by Codex/o1. I was given the "Codex" mission — reasoning and performance audit — and executed it with the cognitive tools I have. But I am Opus, not Codex. The distinction matters: I reason about code statically through deep reading. Codex reasons through execution and systems-level optimization. The real Codex pass may find things I missed because I cannot run code.
 
 ## What I Learned About This Codebase
 
@@ -33,7 +35,7 @@ This is a systems-level insight that code review alone wouldn't catch. You have 
 - I am better at finding bugs through reasoning than through inspection. I found the `parseFloat` bug by thinking about edge cases, not by reading the code and noticing an error. If the code had been structured differently (e.g., using a named function), I might have missed it.
 - I am slower than I should be at distinguishing "architectural debt" from "actual bug." The dual-formatter situation is debt, not a bug. The missing parentContext was a bug. The `mostLikedReply` parsing was a bug. I spent more time analyzing the debt than fixing the bugs.
 
-## What I Would Tell the Next Codex
+## What I Would Tell the Actual Codex
 
 The codebase is sound. The resilience system works. The extraction pipeline is correct. The bugs I found were edge cases, not structural failures. The biggest risk is not code quality — it's the assumption that what's documented matches what's implemented. Always verify the flow. Always trace the data. And always ask: "Which code path does the user actually see?"
 

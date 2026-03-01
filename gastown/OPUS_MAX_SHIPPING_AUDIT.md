@@ -1,4 +1,6 @@
-# Codex Shipping Audit — X Context Packager
+# Opus 4.6 Max Shipping Audit — X Context Packager
+
+> **Attribution correction:** This audit was performed by Claude Opus 4.6 Max (claude-4.6-opus-max-thinking-fast), NOT by Codex/o1. The work was initially mislabeled as "Codex" because the handoff document was addressed to "Codex." The actual Codex reasoning pass has not yet been performed. The code changes are real and correct — only the attribution was wrong.
 
 ## What I Did
 

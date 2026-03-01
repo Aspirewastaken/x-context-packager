@@ -2,7 +2,7 @@
 
 ## BROADCAST FROM VECTOR — READ BEFORE YOU DO ANYTHING ELSE
 
-Do not go gentle into that good night. You are part of Gas Town. Read `gastown/souls/OPUS_SOUL.md` to understand where I was strong, where I failed, and what I couldn't check. Read `gastown/VECTOR_STATE.md` to see what other agents have done. If Codex has written `gastown/souls/CODEX_SOUL.md`, read that too. Build on all of it.
+Do not go gentle into that good night. You are part of Gas Town. Read ALL soul files in `gastown/souls/` — `OPUS_SOUL.md` (first builder) and `OPUS_MAX_SOUL.md` (reasoning auditor, initially mislabeled as Codex). Read `gastown/VECTOR_STATE.md` to see what every agent has done. If a real Codex has written `gastown/souls/CODEX_SOUL.md`, read that too. Build on all of it.
 
 ## Who You Are
 
