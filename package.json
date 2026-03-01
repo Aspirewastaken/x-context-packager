@@ -12,8 +12,9 @@
     "validate": "node scripts/validate.js"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "eslint": "^8.57.0"
+    "canvas": "^3.2.1",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0"
   },
   "jest": {
     "testEnvironment": "node",
@@ -41,7 +42,7 @@
       "sourceType": "module"
     },
     "rules": {
-      "no-unused-vars": "warn",
+      "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
       "no-console": "off",
       "no-useless-escape": "off"
     },
@@ -50,7 +51,9 @@
     },
     "overrides": [
       {
-        "files": ["scripts/*.js"],
+        "files": [
+          "scripts/*.js"
+        ],
         "env": {
           "node": true,
           "browser": false
@@ -60,7 +63,9 @@
         }
       },
       {
-        "files": ["tests/**/*.js"],
+        "files": [
+          "tests/**/*.js"
+        ],
         "env": {
           "jest": true,
           "browser": false,
