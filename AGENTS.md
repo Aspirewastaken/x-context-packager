@@ -28,7 +28,7 @@
 - Test by navigating to X.com post pages and profile pages, then clicking the extension icon
 - Verify extraction output in clipboard matches expected structured format
 - Verify manifest loads without errors in `chrome://extensions`
-- Check: no `fetch`, `XMLHttpRequest`, or network-related code exists in `content/content.js`
+- Check: no network-request API usage exists in `content/content.js`
 
 ### Key Architecture Decisions
 

@@ -132,7 +132,7 @@ Three format options. Structured XML is default because LLMs parse it best.
 ```xml
 <x_context>
 <meta>
-  <url>https://x.com/user/status/123456</url>
+  <url>x.com/user/status/123456</url>
   <extracted_at>2026-02-28T22:44:00Z</extracted_at>
   <page_type>post</page_type>
   <total_tweets>47</total_tweets>
@@ -151,10 +151,10 @@ Three format options. Structured XML is default because LLMs parse it best.
   </text>
   <hashtags>#AI #OpenSource</hashtags>
   <links>
-    <link url="https://example.com/article" display="example.com/article"/>
+    <link url="example.com/article" display="example.com/article"/>
   </links>
   <images>
-    <image url="https://pbs.twimg.com/media/abc123.jpg" alt="Description"/>
+    <image url="pbs.twimg.com/media/abc123.jpg" alt="Description"/>
   </images>
   <video present="true"/>
   <poll>
@@ -168,10 +168,10 @@ Three format options. Structured XML is default because LLMs parse it best.
     <author name="Quoted Author" handle="@quoted" verified="none"/>
     <text>The quoted tweet text</text>
     <links>
-      <link url="https://quoted-link.com" display="quoted-link.com"/>
+      <link url="quoted-link.com" display="quoted-link.com"/>
     </links>
   </quoted_tweet>
-  <link_card domain="example.com" title="Article Title" description="Preview text" url="https://example.com/article"/>
+  <link_card domain="example.com" title="Article Title" description="Preview text" url="example.com/article"/>
   <community_note>Readers added context: This claim has been disputed by multiple sources.</community_note>
   <engagement replies="712" retweets="315" quotes="48" likes="2.5K" bookmarks="434" views="4.3M"/>
   <reply_restriction>everyone</reply_restriction>
@@ -197,12 +197,12 @@ Three format options. Structured XML is default because LLMs parse it best.
 </replies>
 
 <all_links>
-  <link index="1" url="https://example.com" context="main post"/>
-  <link index="2" url="https://docs.example.com" context="reply 4"/>
+  <link index="1" url="example.com" context="main post"/>
+  <link index="2" url="docs.example.com" context="reply 4"/>
 </all_links>
 
 <all_images>
-  <image index="1" url="https://pbs.twimg.com/media/abc.jpg" context="main post" alt="Screenshot of terminal"/>
+  <image index="1" url="pbs.twimg.com/media/abc.jpg" context="main post" alt="Screenshot of terminal"/>
 </all_images>
 
 <hashtag_index>
@@ -235,7 +235,7 @@ Three format options. Structured XML is default because LLMs parse it best.
 
 ```markdown
 # X.com Post Context
-**URL:** https://x.com/user/status/123456
+**URL:** x.com/user/status/123456
 **Extracted:** 2026-02-28T22:44:00Z | 47 tweets | 12 links | 5 images | ~3,200 tokens
 **Tool:** X Context Packager v1.0.0 by AdLab
 
@@ -248,8 +248,8 @@ Full tweet text here...
 
 > **Quoted:** @quoted — The quoted tweet text
 
-🔗 Links: [example.com/article](https://example.com/article)
-🖼️ Images: https://pbs.twimg.com/media/abc123.jpg
+🔗 Links: [example.com/article](example.com/article)
+🖼️ Images: pbs.twimg.com/media/abc123.jpg
 💬 712 · 🔁 315 · ❤️ 2.5K · 🔖 434 · 👁 4.3M
 
 ---
@@ -289,7 +289,7 @@ Minimal formatting. Just the content with simple separators. For models with lim
 
 ```
 X.com Post Context
-URL: https://x.com/user/status/123456
+URL: x.com/user/status/123456
 Extracted: 2026-02-28T22:44:00Z | 47 tweets | ~3200 tokens
 Tool: X Context Packager v1.0.0 by AdLab
 
@@ -301,8 +301,8 @@ Full tweet text here...
 
 Quoted: @quoted - The quoted tweet text
 
-Links: https://example.com/article
-Images: https://pbs.twimg.com/media/abc123.jpg
+Links: example.com/article
+Images: pbs.twimg.com/media/abc123.jpg
 Replies:712 Retweets:315 Likes:2.5K Bookmarks:434 Views:4.3M
 
 ---
@@ -358,14 +358,14 @@ When on `x.com/username` (no `/status/` in URL):
 ```xml
 <x_context>
 <meta>
-  <url>https://x.com/username</url>
+  <url>x.com/username</url>
   <page_type>profile</page_type>
   <profile>
     <name>Display Name</name>
     <handle>@username</handle>
     <bio>Profile bio text</bio>
     <location>Los Angeles, CA</location>
-    <website>https://example.com</website>
+    <website>example.com</website>
     <joined>Joined March 2020</joined>
     <following>142</following>
     <followers>24.3K</followers>

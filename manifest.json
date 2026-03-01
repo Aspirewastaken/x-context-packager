@@ -10,8 +10,8 @@
     "storage"
   ],
   "host_permissions": [
-    "https://x.com/*",
-    "https://twitter.com/*"
+    "*://x.com/*",
+    "*://twitter.com/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
