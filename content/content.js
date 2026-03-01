@@ -85,7 +85,7 @@
       { selector: '[role="group"][aria-labelledby]', confidence: 0.9, strategy: 'role-based' },
       { selector: 'article[data-testid]', confidence: 0.8, strategy: 'semantic' },
       { selector: '[data-testid*="tweet"]', confidence: 0.7, strategy: 'wildcard' },
-      { selector: 'article:has([role="link"])', confidence: 0.6, strategy: 'has-link' }
+      { selector: 'article[role="article"]', confidence: 0.6, strategy: 'article-role' }
     ],
 
     tweetText: [
@@ -142,7 +142,7 @@
     verifiedBadge: [
       { selector: '[data-testid="icon-verified"]', confidence: 1.0, strategy: 'primary' },
       { selector: '[aria-label*="verified"]', confidence: 0.9, strategy: 'aria-verified' },
-      { selector: 'svg[viewBox*="16"]:has(path[d*="M22.25"])', confidence: 0.8, strategy: 'svg-path' },
+      { selector: 'svg[aria-label*="Verified"]', confidence: 0.8, strategy: 'svg-aria' },
       { selector: '[role="link"] svg[aria-hidden="true"] + *', confidence: 0.7, strategy: 'sibling-svg' },
       { selector: '[data-testid*="verified"]', confidence: 0.6, strategy: 'wildcard-verified' }
     ],
@@ -426,7 +426,7 @@
         // Strategy 2: Look for aria-label patterns
         const ariaElements = contextElement.querySelectorAll('[aria-label]');
         for (const el of ariaElements) {
-          const label = el.getAttribute('aria-label').toLowerCase();
+          const label = (el.getAttribute('aria-label') || '').toLowerCase();
           if (label.includes(selectorKey.toLowerCase().replace(/[^a-z]/g, ''))) {
             alternatives.push({
               selector: `[aria-label*="${selectorKey.toLowerCase().replace(/[^a-z]/g, '')}"]`,
@@ -485,20 +485,24 @@
         }
 
         // Strategy 5: Content-based detection (if expected content provided)
+        // Bounded to leaf text elements only — avoids iterating the entire DOM tree
         if (expectedContent && typeof expectedContent === 'string') {
-          const textElements = contextElement.querySelectorAll('*');
-          for (const el of textElements) {
+          const needle = expectedContent.substring(0, 20);
+          const textContainers = contextElement.querySelectorAll('span, p, div[lang], [data-testid]');
+          let matched = 0;
+          for (const el of textContainers) {
+            if (matched >= 3) break; // Cap at 3 matches to avoid runaway iteration
             const text = el.textContent?.trim();
-            if (text && text.includes(expectedContent.substring(0, 10))) {
-              // Generate a unique selector for this element
+            if (text && text.length < 2000 && text.includes(needle)) {
               const uniqueSelector = this.generateUniqueSelector(el);
               if (uniqueSelector) {
                 alternatives.push({
                   selector: uniqueSelector,
                   confidence: 0.9,
                   strategy: 'content-match',
-                  context: `Found element containing: ${expectedContent.substring(0, 20)}...`
+                  context: `Found element containing: ${needle}...`
                 });
+                matched++;
               }
             }
           }
@@ -549,12 +553,12 @@
           if (current.id) {
             segment += `#${current.id}`;
             path.unshift(segment);
-            break; // ID should be unique enough
+            break;
           }
 
-          const classes = Array.from(current.classList).filter(c => !c.startsWith('r-')); // Skip random classes
-          if (classes.length > 0) {
-            segment += '.' + classes[0];
+          const stableClasses = Array.from(current.classList).filter(c => !c.startsWith('r-'));
+          if (stableClasses.length > 0) {
+            segment += '.' + stableClasses[0];
           }
 
           // Add nth-child if needed
@@ -2361,58 +2365,65 @@
     },
 
     /**
-     * Calculate quality score for a tweet extraction (0-1)
+     * Calculate quality score for a tweet extraction (0-1).
+     * Weighted across five dimensions of extraction completeness.
      */
     calculateTweetQuality: function(tweet) {
-      let score = 1.0;
-      let factors = 0;
+      if (!tweet) return 0;
 
-      // Author completeness (name + handle)
-      if (tweet.author.name && tweet.author.handle) {
-        score *= 1.0;
-      } else if (tweet.author.name || tweet.author.handle) {
-        score *= 0.7;
+      // Each dimension scores 0-1, then weighted average
+      const dimensions = [];
+
+      // 1. Author identity (weight: 3) — most critical signal
+      const hasName = !!tweet.author?.name;
+      const hasHandle = !!tweet.author?.handle;
+      if (hasName && hasHandle) dimensions.push({ score: 1.0, weight: 3 });
+      else if (hasHandle) dimensions.push({ score: 0.7, weight: 3 });
+      else if (hasName) dimensions.push({ score: 0.5, weight: 3 });
+      else dimensions.push({ score: 0.1, weight: 3 });
+
+      // 2. Content body (weight: 3) — equally critical
+      if (tweet.text && tweet.text.length > 0) {
+        dimensions.push({ score: 1.0, weight: 3 });
       } else {
-        score *= 0.3;
-      }
-      factors++;
-
-      // Text presence
-      if (!tweet.text) {
-        score *= 0.5;
-        factors++;
+        dimensions.push({ score: 0.2, weight: 3 });
       }
 
-      // Timestamp presence
-      if (!tweet.timestamp.iso && !tweet.timestamp.display) {
-        score *= 0.8;
-        factors++;
+      // 3. Temporal context (weight: 1)
+      const hasTime = !!(tweet.timestamp?.iso || tweet.timestamp?.display);
+      dimensions.push({ score: hasTime ? 1.0 : 0.5, weight: 1 });
+
+      // 4. Engagement metrics (weight: 1)
+      const engagementValues = Object.values(tweet.engagement || {});
+      const hasEngagement = engagementValues.some(v => v !== null && v !== undefined);
+      dimensions.push({ score: hasEngagement ? 1.0 : 0.6, weight: 1 });
+
+      // 5. Media/link consistency (weight: 2) — text mentions URLs but none extracted
+      const textMentionsMedia = tweet.text && (
+        tweet.text.includes('http') || tweet.text.includes('pic.twitter') || tweet.text.includes('t.co/')
+      );
+      const hasMedia = (tweet.links?.length > 0) || (tweet.images?.length > 0) || (tweet.linkCard);
+      if (textMentionsMedia && !hasMedia) {
+        dimensions.push({ score: 0.4, weight: 2 });
+      } else {
+        dimensions.push({ score: 1.0, weight: 2 });
       }
 
-      // Engagement data presence
-      const hasEngagement = Object.values(tweet.engagement).some(v => v !== null);
-      if (!hasEngagement) {
-        score *= 0.9;
-        factors++;
-      }
-
-      // Links/images presence (if expected)
-      if (tweet.links.length === 0 && tweet.images.length === 0 && tweet.text &&
-          (tweet.text.includes('http') || tweet.text.includes('pbs.twimg.com'))) {
-        score *= 0.7; // Expected media but not found
-        factors++;
-      }
-
-      return factors > 0 ? score : 1.0;
+      const totalWeight = dimensions.reduce((s, d) => s + d.weight, 0);
+      const weightedSum = dimensions.reduce((s, d) => s + d.score * d.weight, 0);
+      return totalWeight > 0 ? weightedSum / totalWeight : 1.0;
     },
 
     /**
      * Generate extraction health report
      */
     generateHealthReport: function(extractedData) {
+      const sessionCopy = { ...this.currentSession };
+      sessionCopy.selectorsUsed = Array.from(this.currentSession.selectorsUsed);
+
       const report = {
         systemHealth: SELECTOR_HEALTH.getSystemHealth(),
-        sessionStats: { ...this.currentSession },
+        sessionStats: sessionCopy,
         recommendations: [],
         criticalIssues: []
       };
@@ -2568,83 +2579,6 @@
       return validationResults;
     },
 
-    /**
-     * Check for DOM structure changes since last validation.
-     * Called during extraction to piggyback validation without extra overhead.
-     */
-    detectChanges: function() {
-      return this.validateSelectors();
-    }
-  };
-
-  // =========================================================================
-  // COMMUNITY CONTRIBUTION PIPELINE
-  // =========================================================================
-
-  /**
-   * Allows community-sourced selector updates and validation
-   */
-  const COMMUNITY_CONTRIBUTIONS = {
-    /**
-     * Submit a selector update for community validation
-     */
-    submitSelectorUpdate: function(selectorKey, newSelector, contributorInfo = {}) {
-      const submission = {
-        selectorKey: selectorKey,
-        newSelector: newSelector,
-        contributor: contributorInfo,
-        submittedAt: Date.now(),
-        validationResults: null,
-        status: 'pending'
-      };
-
-      try {
-        // In a real implementation, this would send to a server
-        // For now, store locally for manual review
-        chrome.storage.local.get(['communitySubmissions'], (result) => {
-          const submissions = result.communitySubmissions || [];
-          submissions.push(submission);
-
-          chrome.storage.local.set({
-            'communitySubmissions': submissions
-          });
-        });
-      } catch (e) {
-        // Silent fail
-      }
-    },
-
-    /**
-     * Validate community submissions
-     */
-    validateSubmissions: function() {
-      // In a real system, this would run automated tests
-      // For now, just mark as validated
-      try {
-        chrome.storage.local.get(['communitySubmissions'], (result) => {
-          const submissions = result.communitySubmissions || [];
-          submissions.forEach(sub => {
-            if (sub.status === 'pending') {
-              // Basic validation: check if selector is syntactically valid
-              try {
-                document.querySelectorAll(sub.newSelector);
-                sub.status = 'validated';
-                sub.validatedAt = Date.now();
-              } catch (e) {
-                sub.status = 'invalid';
-                sub.error = e.message;
-              }
-            }
-          });
-
-          chrome.storage.local.set({
-            'communitySubmissions': submissions
-          });
-        });
-      } catch (e) {
-        // Silent fail
-      }
-    }
   };
 
   // =========================================================================
