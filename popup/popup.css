@@ -1,0 +1,361 @@
+/**
+ * X Context Packager — Popup Styles
+ * AdLab Cinematic Dark Theme
+ *
+ * Design Philosophy: See DESIGN_PHILOSOPHY.md
+ * Default to invisible. One button. Green check. Done.
+ */
+
+:root {
+  /* Backgrounds */
+  --void: #0A0A0A;
+  --surface: #141414;
+  --surface-hover: #1F1F1F;
+  --surface-border: #2A2A2A;
+
+  /* Text */
+  --text-primary: #FAFAFA;
+  --text-secondary: #A0A0A0;
+  --text-muted: #666666;
+
+  /* Brand */
+  --adlab-accent: #1d9bf0;
+  --adlab-accent-hover: #1a8cd8;
+  --adlab-red: #E63946;
+  --adlab-gold: #c9a962;
+
+  /* Status */
+  --status-green: #00BA7C;
+  --status-yellow: #FFD166;
+  --status-orange: #F77F00;
+  --status-red: #E63946;
+
+  /* Effects */
+  --glow-accent: rgba(29, 155, 240, 0.12);
+  --glow-gold: rgba(201, 169, 98, 0.15);
+
+  /* Motion */
+  --transition: 200ms ease-out;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 300px;
+  background: var(--void);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 580px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ── Header ── */
+header {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-left: 3px solid var(--adlab-gold);
+}
+
+.brand-mark {
+  font-size: 11px;
+  color: var(--adlab-gold);
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin-bottom: 2px;
+}
+
+.tool-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── Mode Line ── */
+.mode-line {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--surface-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Error State ── */
+.error-state {
+  text-align: center;
+  padding: 20px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── Action Area ── */
+#action-area {
+  margin-bottom: 8px;
+}
+
+/* ── Primary Button (THE button) ── */
+.btn-primary {
+  width: 100%;
+  padding: 14px 0;
+  border-radius: 8px;
+  border: none;
+  background: var(--adlab-accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all var(--transition);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.btn-primary:hover {
+  background: var(--adlab-accent-hover);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-primary.extracting {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.btn-primary.success {
+  background: var(--status-green);
+}
+
+.btn-primary.copy-again {
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--surface-border);
+}
+
+.btn-primary.copy-again:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+/* ── Token Indicator ── */
+.token-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  padding: 0 2px;
+}
+
+.token-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.token-dot.green { background: var(--status-green); }
+.token-dot.yellow { background: var(--status-yellow); }
+.token-dot.orange { background: var(--status-orange); }
+.token-dot.red { background: var(--status-red); }
+
+/* ── Gear Button ── */
+.gear-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: color var(--transition);
+}
+
+.gear-btn:hover {
+  color: var(--text-secondary);
+}
+
+/* ── Gear Panel (power user territory) ── */
+.gear-panel {
+  border-top: 1px solid var(--surface-border);
+  padding-top: 12px;
+  margin-top: 4px;
+  animation: fadeIn var(--transition);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.section-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  margin-top: 10px;
+}
+
+.section-label:first-child {
+  margin-top: 0;
+}
+
+/* ── Stats Detail ── */
+.stats-row {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+/* ── Format Selector ── */
+.format-selector {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.format-btn {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 6px;
+  border: 1px solid var(--surface-border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.format-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-secondary);
+}
+
+.format-btn.active {
+  border-color: var(--adlab-accent);
+  background: var(--glow-accent);
+  color: var(--adlab-accent);
+}
+
+/* ── Options ── */
+.options-list {
+  margin-bottom: 8px;
+}
+
+.option-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.option-row input[type="checkbox"] {
+  accent-color: var(--adlab-accent);
+  cursor: pointer;
+}
+
+.option-row select {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--surface-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* ── Preview ── */
+.preview-section {
+  margin-top: 8px;
+}
+
+.preview-text {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ── Secondary Button ── */
+.btn-secondary {
+  width: 100%;
+  padding: 10px 0;
+  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: all var(--transition);
+}
+
+.btn-secondary:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* ── Footer ── */
+footer {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--surface-border);
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-border);
+  border-radius: 2px;
+}
