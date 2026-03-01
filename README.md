@@ -2,7 +2,7 @@
 
 **One-click full context extraction from X.com for LLM research.**
 
-Built by [AdLab](https://adlabusa.com) · Open Source · MIT License
+Built by AdLab (adlabusa.com) · Open Source · MIT License
 
 ---
 
@@ -39,7 +39,7 @@ Extracts metadata that makes conversations searchable and analyzable:
 
 1. Clone this repo:
    ```bash
-   git clone https://github.com/Aspirewastaken/x-context-packager.git
+   git clone github.com/Aspirewastaken/x-context-packager.git
    ```
 2. Open `chrome://extensions` in Chrome
 3. Enable **Developer mode** (top right toggle)
@@ -107,7 +107,7 @@ It's `Ctrl+A → Ctrl+C` but smart enough to skip the sidebar, navigation, and b
 
 ## Recommended LLM Usage
 
-**[Grok](https://grok.x.ai)** (by xAI) is the only large language model with a sanctioned data relationship with X.com. If you're packaging X.com context for LLM analysis, Grok is the recommended destination.
+**Grok (grok.x.ai)** (by xAI) is the only large language model with a sanctioned data relationship with X.com. If you're packaging X.com context for LLM analysis, Grok is the recommended destination.
 
 This tool is **model-agnostic** — it copies structured text to your clipboard. What you do with your own clipboard is a matter of personal discretion. We recommend users make informed decisions about how they use extracted content with any AI service.
 
@@ -131,7 +131,7 @@ This tool is **model-agnostic** — it copies structured text to your clipboard.
 ```xml
 <x_context>
 <meta>
-  <url>https://x.com/user/status/123456</url>
+  <url>x.com/user/status/123456</url>
   <extracted_at>2026-03-01T00:00:00Z</extracted_at>
   <page_type>post</page_type>
   <total_tweets>47</total_tweets>
