@@ -1094,40 +1094,74 @@
         return { error: 'No tweets found on this page' };
       }
 
-      // First tweet is the main post
-      const mainPost = extractTweet(tweetEls[0], { depth: 0, position: 0, isOp: false });
+      // Find the focal tweet — the one matching the URL's status ID.
+      // On X.com post pages, tweets above the focal tweet are parent
+      // context (the thread the post is replying to). The focal tweet
+      // is identified by a <time> element whose parent <a> links to
+      // the current status URL, or by having the analytics/views link.
+      const statusMatch = window.location.pathname.match(/\/status\/(\d+)/);
+      const statusId = statusMatch ? statusMatch[1] : null;
+      let focalIndex = 0;
+
+      if (statusId) {
+        for (let i = 0; i < tweetEls.length; i++) {
+          const el = tweetEls[i];
+          // Check for a <time> element inside a link to this status ID
+          const timeLinks = qsa(el, 'a[href*="/status/"] time');
+          for (const tl of timeLinks) {
+            const href = tl.parentElement?.getAttribute('href') || '';
+            if (href.includes(`/status/${statusId}`)) {
+              focalIndex = i;
+              break;
+            }
+          }
+          if (focalIndex === i && i > 0) break;
+
+          // Fallback: check for analytics link (only focal tweet has views)
+          const analyticsLink = qs(el, SELECTORS.analyticsLink);
+          if (analyticsLink) {
+            const href = analyticsLink.getAttribute('href') || '';
+            if (href.includes(`/status/${statusId}`)) {
+              focalIndex = i;
+              break;
+            }
+          }
+        }
+      }
+
+      const mainPost = extractTweet(tweetEls[focalIndex], { depth: 0, position: 0, isOp: false });
       const opHandle = mainPost.author.handle;
 
-      // Remaining are replies
+      // Tweets before the focal tweet are parent context (thread ancestors)
+      const parentContext = [];
+      for (let i = 0; i < focalIndex; i++) {
+        parentContext.push(extractTweet(tweetEls[i], { depth: 0, position: i, isOp: false }));
+      }
+
+      // Tweets after the focal tweet are replies
       const replies = [];
-      for (let i = 1; i < tweetEls.length; i++) {
+      for (let i = focalIndex + 1; i < tweetEls.length; i++) {
         const el = tweetEls[i];
 
-        // Calculate depth from DOM structure
         let depth = 1;
-        // Look for indentation clues — thread connectors, nested reply containers
         const parentArticle = el.closest('article');
         if (parentArticle) {
-          // Count ancestor cellInnerDiv elements as proxy for nesting
           let parent = el.parentElement;
           let nestLevel = 0;
           while (parent && parent !== document.body) {
             if (parent.matches?.(SELECTORS.cellInnerDiv)) nestLevel++;
             parent = parent.parentElement;
           }
-          // Heuristic: more nesting = deeper thread
           if (nestLevel > 3) depth = 2;
           if (nestLevel > 5) depth = 3;
         }
 
-        // Check if reply mentions someone (reply-to context)
         const reply = extractTweet(el, {
           depth: depth,
-          position: i,
+          position: i - focalIndex,
           isOp: opHandle && qs(el, SELECTORS.userName)?.textContent?.includes(opHandle?.replace('@', ''))
         });
 
-        // Override isOp based on handle comparison
         if (opHandle && reply.author.handle) {
           reply.threading.isOp = reply.author.handle.toLowerCase() === opHandle.toLowerCase();
         }
@@ -1145,7 +1179,7 @@
         }
       }
 
-      return { mainPost, replies, replySortMode };
+      return { mainPost, replies, replySortMode, parentContext };
     } catch {
       return { error: 'Failed to extract post context from the current page' };
     }
@@ -1248,6 +1282,7 @@
         tool: 'X Context Packager v1.0.0 by AdLab',
       },
       mainPost: null,
+      parentContext: [],
       replies: [],
       profile: null,
       posts: [],
@@ -1264,8 +1299,9 @@
 
     if (pageType === 'post') {
       payload.mainPost = extractedData.mainPost;
+      payload.parentContext = extractedData.parentContext || [];
       payload.replies = extractedData.replies || [];
-      allTweets = [extractedData.mainPost, ...payload.replies];
+      allTweets = [...payload.parentContext, extractedData.mainPost, ...payload.replies];
       payload.meta.totalTweets = allTweets.length;
 
       // Apply max replies cap
@@ -1538,7 +1574,17 @@
     lines.push('');
 
     if (payload.meta.pageType === 'post') {
-      // Main post
+      // Parent context (thread ancestors above the focal tweet)
+      if (payload.parentContext && payload.parentContext.length > 0) {
+        lines.push(`<parent_context count="${payload.parentContext.length}">`);
+        for (let i = 0; i < payload.parentContext.length; i++) {
+          lines.push(formatTweetStructured(payload.parentContext[i], 'parent', `${xmlAttr('index', i + 1)}`, options));
+        }
+        lines.push('</parent_context>');
+        lines.push('');
+      }
+
+      // Focal tweet (the post matching the URL)
       if (payload.mainPost) {
         lines.push(formatTweetStructured(payload.mainPost, 'main_post', '', options));
         lines.push('');
