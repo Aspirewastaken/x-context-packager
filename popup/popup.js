@@ -999,7 +999,7 @@
       packageBtn.classList.add('copy-again');
       btnText.textContent = '📋 Copy Again';
       packageButtonMode = 'copy';
-    }, 2000);
+    }, 3000);
   }
 
   function showError(message) {
