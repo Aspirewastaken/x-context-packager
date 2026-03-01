@@ -75,61 +75,6 @@
   async function updateHealthIndicators(telemetry) {
     if (!healthIndicator || !telemetry) return;
 
-    const fallbackCount = telemetry.fallbacksTriggered || 0;
-    const selfHealingCount = telemetry.selfHealingUsed || 0;
-    const level = telemetry.healthLevel || 'healthy';
-
-    const levelMap = {
-      'healthy':        { dot: 'green',  text: 'Healthy' },
-      'monitoring':     { dot: 'yellow', text: 'Monitoring' },
-      'needs_attention': { dot: 'red',   text: 'Needs Attention' }
-    };
-    const display = levelMap[level] || levelMap['healthy'];
-
-    healthDot.className = `health-dot ${display.dot}`;
-    healthLabel.textContent = `System Health: ${display.text}`;
-
-    const issues = [];
-    if (fallbackCount > 0) {
-      issues.push(`${fallbackCount} fallback${fallbackCount > 1 ? 's' : ''} used`);
-    }
-    if (selfHealingCount > 0) {
-      issues.push(`${selfHealingCount} self-healing op${selfHealingCount > 1 ? 's' : ''}`);
-    }
-
-    if (issues.length > 0) {
-      healthIssues.textContent = issues.join(' · ');
-      healthIssues.classList.remove('hidden');
-    } else {
-      healthIssues.classList.add('hidden');
-    }
-
-    healthIndicator.classList.remove('hidden');
-  }
-
-  async function loadHealthStatus() {
-    try {
-      const result = await chrome.storage.local.get(['lastHealthReport', 'extractionQuality']);
-      if (result.lastHealthReport) {
-        const report = result.lastHealthReport;
-        updateHealthIndicators({
-          healthLevel: report.healthLevel || 'healthy',
-          fallbacksTriggered: report.sessionStats?.fallbacksTriggered || 0,
-          selfHealingUsed: report.sessionStats?.selfHealingUsed || 0
-        });
-      }
-    } catch (e) {
-      // Silent fail — health monitoring is nice-to-have
-    }
-  }
-
-  // Load and display health status
-  loadHealthStatus();
-
-  // ── HEALTH MONITORING ──
-  async function updateHealthIndicators(telemetry) {
-    if (!healthIndicator || !telemetry) return;
-
     const systemHealth = telemetry.systemHealth || 1.0;
     const fallbackCount = telemetry.fallbacksTriggered || 0;
     const selfHealingCount = telemetry.selfHealingUsed || 0;
