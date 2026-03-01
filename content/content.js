@@ -71,6 +71,631 @@
   };
 
   // =========================================================================
+  // DOM RESILIENCE & ADAPTATION SYSTEM
+  // =========================================================================
+
+  /**
+   * SELECTOR_FALLBACKS — Multiple strategies per content type for resilience
+   * Each fallback includes: selector, confidence score, extraction strategy
+   */
+  const SELECTOR_FALLBACKS = {
+    // Tweet containers - most critical selectors
+    tweet: [
+      { selector: '[data-testid="tweet"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[role="group"][aria-labelledby]', confidence: 0.9, strategy: 'role-based' },
+      { selector: 'article[data-testid]', confidence: 0.8, strategy: 'semantic' },
+      { selector: '[data-testid*="tweet"]', confidence: 0.7, strategy: 'wildcard' },
+      { selector: 'article[role="article"]', confidence: 0.6, strategy: 'article-role' }
+    ],
+
+    tweetText: [
+      { selector: '[data-testid="tweetText"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="Tweet-User-Text"]', confidence: 0.9, strategy: 'user-text' },
+      { selector: '[role="group"] [lang]', confidence: 0.8, strategy: 'lang-attr' },
+      { selector: 'article [lang]', confidence: 0.7, strategy: 'article-lang' },
+      { selector: '[data-testid*="text"]', confidence: 0.6, strategy: 'wildcard-text' }
+    ],
+
+    userName: [
+      { selector: '[data-testid="User-Name"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[role="link"][aria-label*="View profile"]', confidence: 0.9, strategy: 'aria-profile' },
+      { selector: 'article [role="link"]:first-child', confidence: 0.8, strategy: 'first-link' },
+      { selector: '[data-testid*="user"]', confidence: 0.7, strategy: 'wildcard-user' },
+      { selector: 'article a[href*="/"]', confidence: 0.6, strategy: 'href-profile' }
+    ],
+
+    // Media selectors with fallbacks
+    tweetPhoto: [
+      { selector: '[data-testid="tweetPhoto"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="Tweet-User-Photo"]', confidence: 0.9, strategy: 'user-photo' },
+      { selector: 'article img[src*="pbs.twimg.com/media"]', confidence: 0.8, strategy: 'pbs-media' },
+      { selector: '[role="group"] img', confidence: 0.7, strategy: 'group-images' },
+      { selector: 'article img:not([src*="profile_images"])', confidence: 0.6, strategy: 'non-profile' }
+    ],
+
+    // Engagement selectors - critical for metrics
+    reply: [
+      { selector: '[data-testid="reply"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[aria-label*="repl"]', confidence: 0.9, strategy: 'aria-reply' },
+      { selector: 'article [role="group"] [role="button"]:first-child', confidence: 0.8, strategy: 'first-button' },
+      { selector: '[data-testid*="reply"]', confidence: 0.7, strategy: 'wildcard-reply' },
+      { selector: 'button[aria-label*="Reply"]', confidence: 0.6, strategy: 'button-reply' }
+    ],
+
+    like: [
+      { selector: '[data-testid="like"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="unlike"]', confidence: 0.9, strategy: 'unlike-fallback' },
+      { selector: '[aria-label*="Like"]', confidence: 0.8, strategy: 'aria-like' },
+      { selector: 'article [role="group"] [role="button"]:nth-child(3)', confidence: 0.7, strategy: 'nth-button' },
+      { selector: 'button[aria-label*="Like"]', confidence: 0.6, strategy: 'button-like' }
+    ],
+
+    retweet: [
+      { selector: '[data-testid="retweet"], [data-testid="repost"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[aria-label*="retweet" i]', confidence: 0.9, strategy: 'aria-retweet' },
+      { selector: 'article [role="group"] [role="button"]:nth-child(2)', confidence: 0.8, strategy: 'nth-button' },
+      { selector: '[data-testid*="retweet"]', confidence: 0.7, strategy: 'wildcard-retweet' },
+      { selector: 'button[aria-label*="Repost"]', confidence: 0.6, strategy: 'button-repost' }
+    ],
+
+    // Verification badges
+    verifiedBadge: [
+      { selector: '[data-testid="icon-verified"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[aria-label*="verified"]', confidence: 0.9, strategy: 'aria-verified' },
+      { selector: 'svg[aria-label*="Verified"]', confidence: 0.8, strategy: 'svg-aria' },
+      { selector: '[role="link"] svg[aria-hidden="true"] + *', confidence: 0.7, strategy: 'sibling-svg' },
+      { selector: '[data-testid*="verified"]', confidence: 0.6, strategy: 'wildcard-verified' }
+    ],
+
+    // Embedded content
+    quoteTweet: [
+      { selector: '[data-testid="quoteTweet"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[role="link"][aria-label*="quote"]', confidence: 0.9, strategy: 'aria-quote' },
+      { selector: 'article article', confidence: 0.8, strategy: 'nested-article' },
+      { selector: '[data-testid*="quote"]', confidence: 0.7, strategy: 'wildcard-quote' },
+      { selector: '[role="group"] [role="group"]', confidence: 0.6, strategy: 'nested-group' }
+    ],
+
+    cardWrapper: [
+      { selector: '[data-testid="card.wrapper"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="cardContainer"]', confidence: 0.9, strategy: 'container' },
+      { selector: '[role="link"][aria-label*="card"]', confidence: 0.8, strategy: 'aria-card' },
+      { selector: 'article a[href*="://"]:not([href*="@"])', confidence: 0.7, strategy: 'external-link' },
+      { selector: '[data-testid*="card"]', confidence: 0.6, strategy: 'wildcard-card' }
+    ],
+
+    // Profile selectors
+    profileHeader: [
+      { selector: '[data-testid="UserProfileHeader_Items"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="userActions"]', confidence: 0.9, strategy: 'user-actions' },
+      { selector: '[role="banner"] [role="group"]', confidence: 0.8, strategy: 'banner-group' },
+      { selector: '[data-testid*="profile"]', confidence: 0.7, strategy: 'wildcard-profile' },
+      { selector: 'main header', confidence: 0.6, strategy: 'main-header' }
+    ],
+
+    profileBio: [
+      { selector: '[data-testid="UserDescription"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="userBio"]', confidence: 0.9, strategy: 'user-bio' },
+      { selector: '[role="banner"] p, [role="banner"] span:not([role])', confidence: 0.8, strategy: 'banner-text' },
+      { selector: '[data-testid*="bio"]', confidence: 0.7, strategy: 'wildcard-bio' },
+      { selector: 'main header p', confidence: 0.6, strategy: 'header-para' }
+    ],
+
+    profileName: [
+      { selector: '[data-testid="UserName"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="userProfileName"]', confidence: 0.9, strategy: 'profile-name' },
+      { selector: '[role="heading"][aria-level="2"]', confidence: 0.8, strategy: 'heading' },
+      { selector: '[data-testid*="Name"]', confidence: 0.7, strategy: 'wildcard-name' }
+    ],
+
+    profileFollowLinks: [
+      { selector: 'a[href$="/following"], a[href$="/followers"], a[href$="/verified_followers"]', confidence: 1.0, strategy: 'primary' },
+      { selector: 'a[href*="/follow"]', confidence: 0.8, strategy: 'partial-href' },
+      { selector: '[role="link"][href*="follow"]', confidence: 0.7, strategy: 'role-link' }
+    ],
+
+    bookmark: [
+      { selector: '[data-testid="bookmark"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="removeBookmark"]', confidence: 0.9, strategy: 'remove-bookmark' },
+      { selector: '[aria-label*="Bookmark"]', confidence: 0.8, strategy: 'aria-bookmark' },
+      { selector: 'article [role="group"] [role="button"]:nth-child(4)', confidence: 0.7, strategy: 'nth-button' },
+      { selector: 'button[aria-label*="Bookmark"]', confidence: 0.6, strategy: 'button-bookmark' }
+    ],
+
+    videoPlayer: [
+      { selector: '[data-testid="videoPlayer"], [data-testid="videoComponent"], video', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="video"]', confidence: 0.9, strategy: 'wildcard-video' },
+      { selector: 'article video', confidence: 0.8, strategy: 'article-video' },
+      { selector: '[aria-label*="video" i]', confidence: 0.7, strategy: 'aria-video' }
+    ],
+
+    gifIndicator: [
+      { selector: '[data-testid="gifPlayer"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="gif"]', confidence: 0.9, strategy: 'wildcard-gif' },
+      { selector: '[aria-label*="GIF"]', confidence: 0.8, strategy: 'aria-gif' }
+    ],
+
+    communityNote: [
+      { selector: '[data-testid="birdwatch-pivot"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="birdwatch"]', confidence: 0.9, strategy: 'wildcard-birdwatch' },
+      { selector: '[aria-label*="community note" i]', confidence: 0.8, strategy: 'aria-note' },
+      { selector: '[data-testid*="community"]', confidence: 0.7, strategy: 'wildcard-community' }
+    ],
+
+    poll: [
+      { selector: '[data-testid="cardPoll"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="poll"]', confidence: 0.9, strategy: 'wildcard-poll' },
+      { selector: '[role="listbox"]', confidence: 0.7, strategy: 'listbox' }
+    ],
+
+    showMore: [
+      { selector: '[data-testid="tweet-text-show-more-link"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="show-more"]', confidence: 0.9, strategy: 'wildcard-show-more' },
+      { selector: 'a[role="link"][href*="/status/"]', confidence: 0.7, strategy: 'status-link' }
+    ],
+
+    sensitiveWarning: [
+      { selector: '[data-testid="tweet-text-sensitive-warning"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid*="sensitive"]', confidence: 0.9, strategy: 'wildcard-sensitive' }
+    ],
+
+    timestamp: [
+      { selector: 'time', confidence: 1.0, strategy: 'primary' },
+      { selector: 'time[datetime]', confidence: 0.9, strategy: 'datetime-attr' },
+      { selector: '[data-testid*="time"]', confidence: 0.7, strategy: 'wildcard-time' }
+    ],
+
+    replySortTab: [
+      { selector: '[role="tab"][aria-selected="true"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[role="tablist"] [aria-selected="true"]', confidence: 0.9, strategy: 'tablist-selected' },
+      { selector: '[data-testid*="tab"][aria-selected="true"]', confidence: 0.8, strategy: 'testid-tab' }
+    ],
+
+    primaryColumn: [
+      { selector: '[data-testid="primaryColumn"]', confidence: 1.0, strategy: 'primary' },
+      { selector: 'main[role="main"]', confidence: 0.8, strategy: 'main-role' },
+      { selector: '[data-testid*="column"]', confidence: 0.7, strategy: 'wildcard-column' }
+    ]
+  };
+
+  // =========================================================================
+  // SELECTOR HEALTH MONITORING & TELEMETRY
+  // =========================================================================
+
+  /**
+   * Tracks selector success/failure rates for resilience optimization
+   */
+  const SELECTOR_HEALTH = {
+    // In-memory tracking (persisted via chrome.storage.local)
+    stats: {},
+    lastValidation: null,
+
+    /**
+     * Record selector usage and success/failure
+     */
+    recordUsage: function(selectorKey, selector, success, confidence = 1.0, context = {}) {
+      if (!this.stats[selectorKey]) {
+        this.stats[selectorKey] = {};
+      }
+      if (!this.stats[selectorKey][selector]) {
+        this.stats[selectorKey][selector] = {
+          attempts: 0,
+          successes: 0,
+          failures: 0,
+          avgConfidence: 0,
+          lastUsed: null,
+          context: context
+        };
+      }
+
+      const stat = this.stats[selectorKey][selector];
+      stat.attempts++;
+      stat.lastUsed = Date.now();
+
+      if (success) {
+        stat.successes++;
+      } else {
+        stat.failures++;
+      }
+
+      // Update rolling average confidence
+      stat.avgConfidence = (stat.avgConfidence * (stat.attempts - 1) + confidence) / stat.attempts;
+
+      this.persistStats();
+    },
+
+    /**
+     * Get success rate for a selector
+     */
+    getSuccessRate: function(selectorKey, selector) {
+      const stat = this.stats[selectorKey]?.[selector];
+      if (!stat || stat.attempts === 0) return 0;
+      return stat.successes / stat.attempts;
+    },
+
+    /**
+     * Get health score (0-1) combining success rate and confidence
+     */
+    getHealthScore: function(selectorKey, selector) {
+      const successRate = this.getSuccessRate(selectorKey, selector);
+      const stat = this.stats[selectorKey]?.[selector];
+      const confidence = stat?.avgConfidence || 0;
+      return (successRate * 0.7) + (confidence * 0.3);
+    },
+
+    /**
+     * Find best performing selector for a key
+     */
+    getBestSelector: function(selectorKey) {
+      const selectors = this.stats[selectorKey];
+      if (!selectors) return null;
+
+      let bestSelector = null;
+      let bestScore = -1;
+
+      for (const [selector, stat] of Object.entries(selectors)) {
+        const score = this.getHealthScore(selectorKey, selector);
+        if (score > bestScore && stat.attempts > 2) { // Require minimum attempts
+          bestScore = score;
+          bestSelector = selector;
+        }
+      }
+
+      return bestSelector;
+    },
+
+    /**
+     * Persist stats to chrome storage
+     */
+    persistStats: function() {
+      try {
+        chrome.storage.local.set({
+          'selectorHealth': this.stats,
+          'lastHealthUpdate': Date.now()
+        });
+      } catch (e) {
+        // Silent fail - telemetry is nice-to-have
+      }
+    },
+
+    /**
+     * Load stats from chrome storage (sync-compatible: just initializes empty).
+     * The async chrome.storage.local.get cannot complete before the IIFE
+     * finishes extraction, so health stats are session-scoped per extraction.
+     * Accumulated stats are persisted on write and read by the popup.
+     */
+    loadStats: function() {
+      this.stats = {};
+      this.lastValidation = null;
+    },
+
+    /**
+     * Get overall system health score (0-1)
+     */
+    getSystemHealth: function() {
+      const keys = Object.keys(this.stats);
+      if (keys.length === 0) return 1.0; // Default to healthy
+
+      let totalScore = 0;
+      let count = 0;
+
+      for (const key of keys) {
+        const bestSelector = this.getBestSelector(key);
+        if (bestSelector) {
+          totalScore += this.getHealthScore(key, bestSelector);
+          count++;
+        }
+      }
+
+      return count > 0 ? totalScore / count : 1.0;
+    }
+  };
+
+  // Load health stats on initialization
+  SELECTOR_HEALTH.loadStats();
+
+  // =========================================================================
+  // SELF-HEALING SELECTOR DETECTION
+  // =========================================================================
+
+  /**
+   * Automatically analyzes DOM when selectors fail and generates fallback strategies
+   */
+  const SELF_HEALING_DETECTOR = {
+    /**
+     * Analyze DOM structure around failed selector to find alternatives
+     */
+    analyzeDOMForAlternatives: function(selectorKey, contextElement, expectedContent = null) {
+      const alternatives = [];
+
+      try {
+        // Strategy 1: Look for similar data-testid attributes
+        const testIds = contextElement.querySelectorAll('[data-testid]');
+        for (const el of testIds) {
+          const testid = el.getAttribute('data-testid');
+          if (testid && testid.toLowerCase().includes(selectorKey.toLowerCase().replace(/[^a-z]/g, ''))) {
+            alternatives.push({
+              selector: `[data-testid="${testid}"]`,
+              confidence: 0.8,
+              strategy: 'similar-testid',
+              context: `Found similar testid: ${testid}`
+            });
+          }
+        }
+
+        // Strategy 2: Look for aria-label patterns
+        const ariaElements = contextElement.querySelectorAll('[aria-label]');
+        for (const el of ariaElements) {
+          const label = (el.getAttribute('aria-label') || '').toLowerCase();
+          if (label.includes(selectorKey.toLowerCase().replace(/[^a-z]/g, ''))) {
+            alternatives.push({
+              selector: `[aria-label*="${selectorKey.toLowerCase().replace(/[^a-z]/g, '')}"]`,
+              confidence: 0.7,
+              strategy: 'aria-pattern',
+              context: `Found aria-label: ${label}`
+            });
+          }
+        }
+
+        // Strategy 3: Role-based alternatives
+        const roleElements = contextElement.querySelectorAll('[role]');
+        const relevantRoles = {
+          tweet: ['group', 'article'],
+          userName: ['link'],
+          tweetText: ['group'],
+          reply: ['button'],
+          like: ['button'],
+          retweet: ['button']
+        };
+
+        const expectedRoles = relevantRoles[selectorKey] || [];
+        for (const el of roleElements) {
+          const role = el.getAttribute('role');
+          if (expectedRoles.includes(role)) {
+            alternatives.push({
+              selector: `[role="${role}"]`,
+              confidence: 0.6,
+              strategy: 'role-based',
+              context: `Found role: ${role}`
+            });
+          }
+        }
+
+        // Strategy 4: Semantic HTML alternatives
+        const semanticSelectors = {
+          tweet: ['article', 'div[role="group"]'],
+          userName: ['a[href*="/"]', 'span'],
+          tweetText: ['[lang]', 'div', 'span'],
+          reply: ['button', '[role="button"]'],
+          like: ['button', '[role="button"]'],
+          retweet: ['button', '[role="button"]']
+        };
+
+        const semanticAlts = semanticSelectors[selectorKey] || [];
+        for (const selector of semanticAlts) {
+          const elements = contextElement.querySelectorAll(selector);
+          if (elements.length > 0) {
+            alternatives.push({
+              selector: selector,
+              confidence: 0.5,
+              strategy: 'semantic-html',
+              context: `Found ${elements.length} semantic elements`
+            });
+          }
+        }
+
+        // Strategy 5: Content-based detection (if expected content provided)
+        // Bounded to leaf text elements only — avoids iterating the entire DOM tree
+        if (expectedContent && typeof expectedContent === 'string') {
+          const needle = expectedContent.substring(0, 20);
+          const textContainers = contextElement.querySelectorAll('span, p, div[lang], [data-testid]');
+          let matched = 0;
+          for (const el of textContainers) {
+            if (matched >= 3) break; // Cap at 3 matches to avoid runaway iteration
+            const text = el.textContent?.trim();
+            if (text && text.length < 2000 && text.includes(needle)) {
+              const uniqueSelector = this.generateUniqueSelector(el);
+              if (uniqueSelector) {
+                alternatives.push({
+                  selector: uniqueSelector,
+                  confidence: 0.9,
+                  strategy: 'content-match',
+                  context: `Found element containing: ${needle}...`
+                });
+                matched++;
+              }
+            }
+          }
+        }
+
+        // Remove duplicates and sort by confidence
+        const unique = alternatives.filter((alt, index, self) =>
+          index === self.findIndex(a => a.selector === alt.selector)
+        );
+
+        return unique.sort((a, b) => b.confidence - a.confidence);
+
+      } catch (e) {
+        return [];
+      }
+    },
+
+    /**
+     * Generate a unique CSS selector for an element
+     */
+    generateUniqueSelector: function(element) {
+      try {
+        // Try data-testid first
+        const testid = element.getAttribute('data-testid');
+        if (testid) return `[data-testid="${testid}"]`;
+
+        // Try aria-label
+        const ariaLabel = element.getAttribute('aria-label');
+        if (ariaLabel) return `[aria-label="${ariaLabel.replace(/"/g, '\\"')}"]`;
+
+        // Try class-based selector
+        const classes = Array.from(element.classList);
+        if (classes.length > 0) {
+          const classSelector = '.' + classes.join('.');
+          // Verify uniqueness
+          if (document.querySelectorAll(classSelector).length === 1) {
+            return classSelector;
+          }
+        }
+
+        // Generate path-based selector
+        let path = [];
+        let current = element;
+
+        while (current && current !== document.body && path.length < 5) {
+          let segment = current.tagName.toLowerCase();
+
+          if (current.id) {
+            segment += `#${current.id}`;
+            path.unshift(segment);
+            break;
+          }
+
+          const stableClasses = Array.from(current.classList).filter(c => !c.startsWith('r-'));
+          if (stableClasses.length > 0) {
+            segment += '.' + stableClasses[0];
+          }
+
+          // Add nth-child if needed
+          const siblings = Array.from(current.parentElement?.children || []);
+          const index = siblings.indexOf(current);
+          if (siblings.length > 1 && index >= 0) {
+            segment += `:nth-child(${index + 1})`;
+          }
+
+          path.unshift(segment);
+          current = current.parentElement;
+        }
+
+        const selector = path.join(' > ');
+        // Verify uniqueness
+        if (document.querySelectorAll(selector).length === 1) {
+          return selector;
+        }
+
+        return null;
+      } catch (e) {
+        return null;
+      }
+    },
+
+    /**
+     * Test a generated selector and return confidence score
+     */
+    testSelector: function(selector, contextElement = document) {
+      try {
+        const elements = contextElement.querySelectorAll(selector);
+        if (elements.length === 0) return 0; // No matches
+        if (elements.length === 1) return 1.0; // Perfect match
+        if (elements.length <= 3) return 0.8; // Few matches, still useful
+        if (elements.length <= 10) return 0.6; // Multiple matches, less confident
+        return 0.3; // Too many matches, low confidence
+      } catch (e) {
+        return 0; // Invalid selector
+      }
+    }
+  };
+
+  // =========================================================================
+  // RESILIENT EXTRACTION ENGINE
+  // =========================================================================
+
+  /**
+   * Core resilient query engine. Tries primary → fallbacks → self-healing.
+   * Returns { elements: Element[], usedFallback: boolean, usedSelfHealing: boolean }
+   */
+  function _resilientQuery(context, selectorKey, options = {}) {
+    const { expectedContent = null, maxAttempts = 5 } = options;
+    const result = { elements: [], usedFallback: false, usedSelfHealing: false };
+
+    // 1. Try primary selector from SELECTORS
+    const primarySelector = SELECTORS[selectorKey];
+    if (primarySelector) {
+      try {
+        const found = Array.from(context.querySelectorAll(primarySelector));
+        SELECTOR_HEALTH.recordUsage(selectorKey, primarySelector, found.length > 0, 1.0);
+        if (found.length > 0) {
+          EXTRACTION_TELEMETRY.currentSession.selectorsUsed.add(selectorKey);
+          result.elements = found;
+          return result;
+        }
+      } catch (e) {
+        SELECTOR_HEALTH.recordUsage(selectorKey, primarySelector, false, 1.0);
+      }
+    }
+
+    // 2. Try fallbacks from SELECTOR_FALLBACKS (skip first entry if same as primary)
+    const fallbacks = SELECTOR_FALLBACKS[selectorKey] || [];
+    for (const fallback of fallbacks.slice(0, maxAttempts)) {
+      if (fallback.selector === primarySelector) continue;
+      try {
+        const found = Array.from(context.querySelectorAll(fallback.selector));
+        SELECTOR_HEALTH.recordUsage(selectorKey, fallback.selector, found.length > 0, fallback.confidence);
+        if (found.length > 0) {
+          result.elements = found;
+          result.usedFallback = true;
+          EXTRACTION_TELEMETRY.currentSession.fallbacksTriggered++;
+          EXTRACTION_TELEMETRY.currentSession.selectorsUsed.add(selectorKey);
+          return result;
+        }
+      } catch (e) {
+        SELECTOR_HEALTH.recordUsage(selectorKey, fallback.selector, false, fallback.confidence);
+      }
+    }
+
+    // 3. Self-healing: analyze DOM for alternatives
+    try {
+      const alternatives = SELF_HEALING_DETECTOR.analyzeDOMForAlternatives(
+        selectorKey, context, expectedContent
+      );
+      for (const alt of alternatives.slice(0, 3)) {
+        try {
+          const confidence = SELF_HEALING_DETECTOR.testSelector(alt.selector, context);
+          if (confidence >= 0.5) {
+            const found = Array.from(context.querySelectorAll(alt.selector));
+            SELECTOR_HEALTH.recordUsage(selectorKey, alt.selector, found.length > 0, confidence, alt);
+            if (found.length > 0) {
+              result.elements = found;
+              result.usedFallback = true;
+              result.usedSelfHealing = true;
+              EXTRACTION_TELEMETRY.currentSession.selfHealingUsed++;
+              EXTRACTION_TELEMETRY.currentSession.selectorsUsed.add(selectorKey);
+              return result;
+            }
+          }
+        } catch (e) {
+          // Continue to next alternative
+        }
+      }
+    } catch (e) {
+      // Self-healing failed entirely — not critical
+    }
+
+    return result; // Empty elements array
+  }
+
+  /**
+   * Resilient querySelectorAll — always returns an array (never null).
+   */
+  function resilientQuerySelectorAll(context, selectorKey, options = {}) {
+    const { elements } = _resilientQuery(context, selectorKey, options);
+    return elements;
+  }
+
+  /**
+   * Resilient querySelector for a single element — returns Element or null.
+   */
+  function resilientQuerySelectorSingle(context, selectorKey, options = {}) {
+    const { elements } = _resilientQuery(context, selectorKey, options);
+    return elements.length > 0 ? elements[0] : null;
+  }
+
+  // =========================================================================
   // UTILITIES
   // =========================================================================
 
@@ -197,7 +822,7 @@
 
     try {
       // --- AUTHOR ---
-      const userNameEl = qs(tweetEl, SELECTORS.userName);
+      const userNameEl = resilientQuerySelectorSingle(tweetEl, 'userName');
       if (userNameEl) {
         // Display name is usually the first text span
         const nameSpans = qsa(userNameEl, 'span');
@@ -233,7 +858,7 @@
         }
 
         // Verified badge
-        const badge = qs(tweetEl, SELECTORS.verifiedBadge);
+        const badge = resilientQuerySelectorSingle(tweetEl, 'verifiedBadge');
         if (badge) {
           // Try to detect badge type from SVG fill
           const svg = qs(badge, 'svg');
@@ -256,7 +881,7 @@
       }
 
       // --- TIMESTAMP ---
-      const timeEl = qs(tweetEl, SELECTORS.timestamp);
+      const timeEl = resilientQuerySelectorSingle(tweetEl, 'timestamp');
       if (timeEl) {
         tweet.timestamp.iso = timeEl.getAttribute('datetime') || null;
         tweet.timestamp.display = timeEl.textContent?.trim() || null;
@@ -267,7 +892,7 @@
       }
 
       // --- TEXT ---
-      const textEl = qs(tweetEl, SELECTORS.tweetText);
+      const textEl = resilientQuerySelectorSingle(tweetEl, 'tweetText');
       if (textEl) {
         tweet.text = textEl.innerText?.trim() || null;
 
@@ -299,14 +924,14 @@
       }
 
       // --- TRUNCATED ---
-      if (qs(tweetEl, SELECTORS.showMore)) {
+      if (resilientQuerySelectorSingle(tweetEl, 'showMore')) {
         tweet.flags.truncated = true;
       }
 
       // --- REPLY-TO ---
-      // Look for "Replying to @handle" pattern
-      const replyingTo = qsa(tweetEl, 'a[href]');
-      for (const a of replyingTo) {
+      // Look for "Replying to @handle" pattern in links within the tweet
+      const replyLinks = qsa(tweetEl, 'a[href]');
+      for (const a of replyLinks) {
         const parent = a.parentElement;
         if (parent && /replying to/i.test(parent.textContent || '')) {
           const href = a.getAttribute('href') || '';
@@ -329,7 +954,13 @@
       }
 
       // --- IMAGES ---
-      const photoEls = qsa(tweetEl, SELECTORS.tweetPhoto + ' img');
+      const photoContainers = resilientQuerySelectorAll(tweetEl, 'tweetPhoto');
+      let photoEls;
+      if (photoContainers.length > 0) {
+        photoEls = qsa(tweetEl, SELECTORS.tweetPhoto + ' img');
+      } else {
+        photoEls = qsa(tweetEl, 'img[src*="pbs.twimg.com/media"]');
+      }
       for (const img of photoEls) {
         const src = img.getAttribute('src') || '';
         const alt = img.getAttribute('alt') || '';
@@ -343,46 +974,46 @@
       }
 
       // --- VIDEO ---
-      if (qs(tweetEl, SELECTORS.videoPlayer)) {
+      if (resilientQuerySelectorSingle(tweetEl, 'videoPlayer')) {
         tweet.video = true;
       }
 
       // --- GIF ---
-      if (qs(tweetEl, SELECTORS.gifIndicator)) {
+      if (resilientQuerySelectorSingle(tweetEl, 'gifIndicator')) {
         tweet.gif = true;
       }
 
       // --- QUOTED TWEET ---
-      const quoteEl = qs(tweetEl, SELECTORS.quoteTweet);
+      const quoteEl = resilientQuerySelectorSingle(tweetEl, 'quoteTweet');
       if (quoteEl) {
         tweet.quotedTweet = extractQuotedTweet(quoteEl);
       }
 
       // --- LINK CARD ---
-      const cardEl = qs(tweetEl, SELECTORS.cardWrapper);
+      const cardEl = resilientQuerySelectorSingle(tweetEl, 'cardWrapper');
       if (cardEl && !quoteEl) { // Don't extract card if it's a quoted tweet
         tweet.linkCard = extractLinkCard(cardEl);
       }
 
       // --- COMMUNITY NOTE ---
-      const noteEl = qs(tweetEl, SELECTORS.communityNote);
+      const noteEl = resilientQuerySelectorSingle(tweetEl, 'communityNote');
       if (noteEl) {
         tweet.communityNote = textOf(noteEl);
         tweet.flags.hasCommunityNote = true;
       }
 
       // --- POLL ---
-      const pollEl = qs(tweetEl, SELECTORS.poll);
+      const pollEl = resilientQuerySelectorSingle(tweetEl, 'poll');
       if (pollEl) {
         tweet.poll = extractPoll(pollEl);
       }
 
       // --- ENGAGEMENT ---
       // Try aria-label approach on engagement buttons
-      const replyBtn = qs(tweetEl, SELECTORS.reply);
-      const retweetBtn = qs(tweetEl, SELECTORS.retweet);
-      const likeBtn = qs(tweetEl, SELECTORS.like) || qs(tweetEl, SELECTORS.unlike);
-      const bookmarkBtn = qs(tweetEl, SELECTORS.bookmark);
+      const replyBtn = resilientQuerySelectorSingle(tweetEl, 'reply');
+      const retweetBtn = resilientQuerySelectorSingle(tweetEl, 'retweet');
+      const likeBtn = resilientQuerySelectorSingle(tweetEl, 'like') || resilientQuerySelectorSingle(tweetEl, 'unlike');
+      const bookmarkBtn = resilientQuerySelectorSingle(tweetEl, 'bookmark');
 
       tweet.engagement.replies = parseEngagement(replyBtn);
       tweet.engagement.retweets = parseEngagement(retweetBtn);
@@ -400,7 +1031,7 @@
       }
 
       // --- SENSITIVE ---
-      if (qs(tweetEl, SELECTORS.sensitiveWarning)) {
+      if (resilientQuerySelectorSingle(tweetEl, 'sensitiveWarning')) {
         tweet.flags.sensitive = true;
       }
 
@@ -434,7 +1065,7 @@
       }
 
       // Text
-      const textEl = qs(quoteEl, SELECTORS.tweetText);
+      const textEl = resilientQuerySelectorSingle(quoteEl, 'tweetText');
       if (textEl) {
         qt.text = textEl.innerText?.trim() || null;
         // Links
@@ -454,7 +1085,7 @@
       }
 
       // Verified
-      if (qs(quoteEl, SELECTORS.verifiedBadge)) {
+      if (resilientQuerySelectorSingle(quoteEl, 'verifiedBadge')) {
         qt.author.verified = 'blue';
       }
 
@@ -538,8 +1169,8 @@
    */
   function extractPostPage() {
     try {
-      const tweetEls = qsa(document, SELECTORS.tweet);
-      if (tweetEls.length === 0) {
+      const tweetEls = resilientQuerySelectorAll(document, 'tweet');
+      if (!tweetEls || tweetEls.length === 0) {
         return { error: 'No tweets found on this page' };
       }
 
@@ -616,7 +1247,7 @@
 
       // Detect reply sort mode
       let replySortMode = 'relevance';
-      const activeTab = qs(document, SELECTORS.replySortTab);
+      const activeTab = resilientQuerySelectorSingle(document, 'replySortTab');
       if (activeTab) {
         const tabText = (activeTab.textContent || '').toLowerCase();
         if (tabText.includes('recent') || tabText.includes('latest')) {
@@ -647,7 +1278,7 @@
       };
 
       // Profile name
-      const nameEl = qs(document, SELECTORS.profileName);
+      const nameEl = resilientQuerySelectorSingle(document, 'profileName');
       if (nameEl) {
         const spans = qsa(nameEl, 'span');
         for (const span of spans) {
@@ -661,13 +1292,13 @@
       }
 
       // Bio
-      const bioEl = qs(document, SELECTORS.profileBio);
+      const bioEl = resilientQuerySelectorSingle(document, 'profileBio');
       if (bioEl) {
         profile.bio = textOf(bioEl) || null;
       }
 
       // Header items (location, website, joined date)
-      const headerEl = qs(document, SELECTORS.profileHeader);
+      const headerEl = resilientQuerySelectorSingle(document, 'profileHeader');
       if (headerEl) {
         const items = qsa(headerEl, 'span');
         for (const item of items) {
@@ -683,7 +1314,7 @@
       }
 
       // Follower/following counts
-      const followLinks = qsa(document, SELECTORS.profileFollowLinks);
+      const followLinks = resilientQuerySelectorAll(document, 'profileFollowLinks') || [];
       for (const link of followLinks) {
         const href = link.getAttribute('href') || '';
         const countSpan = qs(link, 'span span');
@@ -696,7 +1327,7 @@
       }
 
       // Timeline posts
-      const tweetEls = qsa(document, SELECTORS.tweet);
+      const tweetEls = resilientQuerySelectorAll(document, 'tweet');
       const posts = [];
       for (let i = 0; i < tweetEls.length; i++) {
         posts.push(extractTweet(tweetEls[i], { depth: 0, position: i + 1, isOp: false }));
@@ -1221,40 +1852,351 @@
   /**
    * Format 2: Markdown
    */
+  // =========================================================================
+  // INTELLIGENT MARKDOWN FORMATTING — Self-Deciding Structure
+  // =========================================================================
+
+  /**
+   * Academic Structure: Formal analysis with citations and sections
+   */
+  function formatAcademicStructure(payload, lines, options, analysis) {
+    // Abstract/Overview
+    lines.push('## Abstract');
+    lines.push(`This analysis examines a social media discussion thread from X.com, containing ${payload.meta.totalTweets} posts with ${payload.meta.totalReplies || 0} reply interactions. The conversation ${analysis.analysis.hasQuestions ? 'explores research questions' : 'discusses topics'} in a ${analysis.analysis.isDebate ? 'debate-oriented' : 'conversational'} manner.`);
+    lines.push('');
+
+    // Main Post as Primary Source
+    if (payload.mainPost) {
+      lines.push('## Primary Source');
+      lines.push('**Original Post**');
+      lines.push(`> ${payload.mainPost.text || 'No text content'}`);
+      lines.push('');
+      lines.push(`**Author:** ${payload.mainPost.author?.handle || 'Unknown'} (${payload.mainPost.author?.name || 'Unknown'})`);
+      lines.push(`**Timestamp:** ${payload.mainPost.timestamp?.display || 'Unknown'}`);
+      lines.push(`**Engagement:** ${payload.mainPost.engagement?.likes || 0} likes, ${payload.mainPost.engagement?.retweets || 0} reposts, ${payload.mainPost.engagement?.replies || 0} replies`);
+      lines.push('');
+    }
+
+    // Discussion Analysis
+    if (payload.replies && payload.replies.length > 0) {
+      lines.push('## Discussion Analysis');
+
+      // Group replies by depth/thread
+      const threads = {};
+      payload.replies.forEach((reply, index) => {
+        const depth = reply.threading?.depth || 0;
+        if (!threads[depth]) threads[depth] = [];
+        threads[depth].push({ reply, index });
+      });
+
+      Object.keys(threads).sort((a, b) => parseInt(a) - parseInt(b)).forEach(depth => {
+        const level = parseInt(depth);
+        const title = level === 0 ? 'Direct Responses' : `Thread Level ${level}`;
+        lines.push(`### ${title}`);
+        lines.push('');
+
+        threads[depth].forEach(({ reply, index }) => {
+          lines.push(`#### Response ${index + 1}`);
+          lines.push(`**${reply.author?.handle || 'Unknown'}:** ${reply.text || 'No text content'}`);
+          if (reply.timestamp?.display) {
+            lines.push(`*Posted: ${reply.timestamp.display}*`);
+          }
+          lines.push('');
+        });
+      });
+    }
+
+    // Methodology
+    lines.push('## Methodology');
+    lines.push('This analysis was generated using X Context Packager v1.0.0 by AdLab, an open-source tool designed for transparent extraction of social media context for research purposes.');
+    lines.push('');
+  }
+
+  /**
+   * Q&A Structure: Question-answer format with threaded discussions
+   */
+  function formatQAStructure(payload, lines, options, analysis) {
+    if (payload.mainPost) {
+      // Check if main post contains questions
+      const mainText = payload.mainPost.text || '';
+      const hasQuestion = /\?/.test(mainText);
+
+      if (hasQuestion) {
+        lines.push('## Original Question');
+        lines.push(`**Q:** ${mainText}`);
+        lines.push(`*Asked by ${payload.mainPost.author?.handle || 'Unknown'} on ${payload.mainPost.timestamp?.display || 'Unknown'}*`);
+        lines.push('');
+      } else {
+        lines.push('## Discussion Thread');
+        lines.push(`**Topic:** ${mainText.substring(0, 100)}${mainText.length > 100 ? '...' : ''}`);
+        lines.push(`*Started by ${payload.mainPost.author?.handle || 'Unknown'} on ${payload.mainPost.timestamp?.display || 'Unknown'}*`);
+        lines.push('');
+      }
+    }
+
+    // Answers and follow-ups
+    if (payload.replies && payload.replies.length > 0) {
+      lines.push('## Answers & Discussion');
+
+      payload.replies.forEach((reply, index) => {
+        const isTopLevel = reply.threading?.depth === 1;
+        const prefix = isTopLevel ? 'A' : '↳';
+
+        lines.push(`### ${prefix}${index + 1}: ${reply.author?.handle || 'Unknown'}`);
+        lines.push(`${reply.text || 'No text content'}`);
+        lines.push(`*${reply.timestamp?.display || 'Unknown'} · ${reply.engagement?.likes || 0} likes*`);
+        lines.push('');
+      });
+    }
+  }
+
+  /**
+   * Chat Structure: Conversational log format
+   */
+  function formatChatStructure(payload, lines, options, analysis) {
+    lines.push('## Conversation Log');
+    lines.push('');
+
+    // Main post as conversation start
+    if (payload.mainPost) {
+      const time = payload.mainPost.timestamp?.display || 'Unknown time';
+      lines.push(`[${time}] **${payload.mainPost.author?.handle || 'Unknown'}**`);
+      lines.push(`${payload.mainPost.text || 'No message'}`);
+      lines.push('');
+    }
+
+    // Replies as conversation continuation
+    if (payload.replies && payload.replies.length > 0) {
+      payload.replies.forEach(reply => {
+        const time = reply.timestamp?.display || 'Unknown time';
+        const indent = '  '.repeat(reply.threading?.depth || 0);
+        lines.push(`${indent}[${time}] **${reply.author?.handle || 'Unknown'}**`);
+        lines.push(`${indent}${reply.text || 'No message'}`);
+        lines.push('');
+      });
+    }
+
+    lines.push('---');
+    lines.push(`*Conversation ended. ${payload.replies?.length || 0} replies total.*`);
+  }
+
+  /**
+   * Technical Structure: Documentation format with code emphasis
+   */
+  function formatTechnicalStructure(payload, lines, options, analysis) {
+    lines.push('## Technical Discussion');
+
+    if (payload.mainPost) {
+      lines.push('### Problem Statement');
+      lines.push(`${payload.mainPost.text || 'No description provided'}`);
+      lines.push('');
+      lines.push(`**Posted by:** ${payload.mainPost.author?.handle || 'Unknown'}`);
+      lines.push(`**Date:** ${payload.mainPost.timestamp?.display || 'Unknown'}`);
+      lines.push('');
+    }
+
+    if (payload.replies && payload.replies.length > 0) {
+      lines.push('### Solutions & Discussion');
+
+      // Group by technical themes if possible
+      const technicalReplies = payload.replies.filter(reply =>
+        reply.text && (reply.text.includes('```') || /function|class|api|code|solution/i.test(reply.text))
+      );
+
+      if (technicalReplies.length > 0) {
+        lines.push('#### Code Solutions');
+        technicalReplies.forEach((reply, index) => {
+          lines.push(`**Solution ${index + 1}** by ${reply.author?.handle || 'Unknown'}:`);
+          lines.push(`${reply.text}`);
+          lines.push('');
+        });
+      }
+
+      // Other technical discussion
+      const discussionReplies = payload.replies.filter(reply =>
+        !technicalReplies.includes(reply)
+      );
+
+      if (discussionReplies.length > 0) {
+        lines.push('#### Technical Discussion');
+        discussionReplies.forEach(reply => {
+          lines.push(`- **${reply.author?.handle || 'Unknown'}:** ${reply.text || 'No content'}`);
+        });
+        lines.push('');
+      }
+    }
+
+    // API/Technical references
+    const links = [];
+    if (payload.mainPost?.links) links.push(...payload.mainPost.links);
+    if (payload.replies) {
+      payload.replies.forEach(reply => {
+        if (reply.links) links.push(...reply.links);
+      });
+    }
+
+    if (links.length > 0) {
+      lines.push('### References');
+      links.forEach(link => {
+        lines.push(`- [${link.display}](${link.url})`);
+      });
+      lines.push('');
+    }
+  }
+
+  /**
+   * Narrative Structure: Story-like chronological format
+   */
+  function formatNarrativeStructure(payload, lines, options, analysis) {
+    lines.push('## The Story');
+
+    if (payload.mainPost) {
+      lines.push('### The Beginning');
+      lines.push(`It started when ${payload.mainPost.author?.name || 'someone'} posted:`);
+      lines.push('');
+      lines.push(`> "${payload.mainPost.text || 'No story to tell'}"`);
+      lines.push('');
+      lines.push(`This was on ${payload.mainPost.timestamp?.display || 'a quiet day'}.`);
+      lines.push('');
+    }
+
+    if (payload.replies && payload.replies.length > 0) {
+      lines.push('### What Happened Next');
+
+      // Sort by time if available
+      const sortedReplies = [...payload.replies].sort((a, b) => {
+        const timeA = new Date(a.timestamp?.iso || 0);
+        const timeB = new Date(b.timestamp?.iso || 0);
+        return timeA - timeB;
+      });
+
+      sortedReplies.forEach((reply, index) => {
+        const character = reply.author?.name || reply.author?.handle || 'Someone';
+        const action = reply.threading?.replyTo ? ` replied to ${reply.threading.replyTo}` : ' joined the conversation';
+
+        lines.push(`**${character}**${action}:`);
+        lines.push(`"${reply.text || '...'}"`);
+        lines.push('');
+      });
+
+      lines.push('### The End');
+      lines.push(`And so the story concluded, with ${payload.replies.length} voices contributing to the narrative.`);
+      lines.push('');
+    }
+  }
+
+  /**
+   * Analyzes content and determines optimal markdown structure
+   * Uses meta-prompting logic: debates multiple format options and selects truth
+   */
+  function analyzeContentForOptimalStructure(payload) {
+    const content = {
+      hasQuestions: false,
+      hasCodeBlocks: false,
+      hasLongThreads: false,
+      hasTechnicalContent: false,
+      hasAcademicTone: false,
+      hasConversationalTone: false,
+      isDebate: false,
+      hasPolls: false,
+      hasMedia: false,
+      isProfilePage: payload.meta.pageType === 'profile'
+    };
+
+    // Analyze all text content
+    const allText = [];
+    if (payload.mainPost) allText.push(payload.mainPost.text || '');
+    if (payload.replies) payload.replies.forEach(r => allText.push(r.text || ''));
+    if (payload.posts) payload.posts.forEach(p => allText.push(p.text || ''));
+    const fullText = allText.join(' ').toLowerCase();
+
+    // Content analysis
+    content.hasQuestions = /\?/.test(fullText) && fullText.split('?').length > 3;
+    content.hasCodeBlocks = /```|`[^`]+`|function|class|import|const|let|var/.test(fullText);
+    content.hasLongThreads = payload.replies && payload.replies.length > 20;
+    content.hasTechnicalContent = /(api|algorithm|framework|library|protocol|database|server|client|http|json|xml)/.test(fullText);
+    content.hasAcademicTone = /(research|study|analysis|methodology|hypothesis|conclusion|literature)/.test(fullText);
+    content.isDebate = /(however|but|actually|wrong|agree|disagree|counterpoint|alternative)/.test(fullText);
+    content.hasPolls = payload.replies && payload.replies.some(r => r.poll);
+    content.hasMedia = payload.meta.totalImages > 0 || (payload.replies && payload.replies.some(r => r.video || r.gif));
+
+    // Meta-prompting logic: debate format options
+    const formatOptions = [
+      {
+        name: 'academic',
+        score: (content.hasAcademicTone ? 3 : 0) + (content.hasLongThreads ? 2 : 0) + (content.hasQuestions ? 1 : 0),
+        structure: 'Academic paper style with citations, sections, and formal analysis'
+      },
+      {
+        name: 'qa',
+        score: (content.hasQuestions ? 3 : 0) + (content.isDebate ? 2 : 0) + (content.hasLongThreads ? 1 : 0),
+        structure: 'Q&A format with threaded discussions and answer hierarchies'
+      },
+      {
+        name: 'chat',
+        score: (content.isDebate ? 2 : 0) + (content.hasConversationalTone ? 3 : 0) + (!content.hasLongThreads ? 2 : 0),
+        structure: 'Chat log style with timestamps and conversational flow'
+      },
+      {
+        name: 'technical',
+        score: (content.hasTechnicalContent ? 3 : 0) + (content.hasCodeBlocks ? 3 : 0) + (content.hasMedia ? 1 : 0),
+        structure: 'Technical documentation with code blocks, API references, and structured examples'
+      },
+      {
+        name: 'narrative',
+        score: (!content.hasQuestions && !content.hasTechnicalContent && !content.hasAcademicTone ? 3 : 0) + (content.hasLongThreads ? 1 : 0),
+        structure: 'Narrative story format with chronological flow and character development'
+      }
+    ];
+
+    // Select highest scoring format, with stability tiebreaker
+    formatOptions.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    const optimalFormat = formatOptions[0];
+
+    return {
+      format: optimalFormat.name,
+      score: optimalFormat.score,
+      structure: optimalFormat.structure,
+      analysis: content
+    };
+  }
+
   function formatMarkdown(payload, options = {}) {
+    // First, analyze content to determine optimal structure
+    const structureAnalysis = analyzeContentForOptimalStructure(payload);
+
     const lines = [];
 
-    lines.push('# X.com Post Context');
+    // Header adapts based on format
+    const formatTitles = {
+      academic: 'X.com Discussion Analysis',
+      qa: 'X.com Q&A Thread',
+      chat: 'X.com Conversation Log',
+      technical: 'X.com Technical Discussion',
+      narrative: 'X.com Story Thread'
+    };
+
+    lines.push(`# ${formatTitles[structureAnalysis.format] || 'X.com Post Context'}`);
     lines.push(`**URL:** ${payload.meta.url}`);
     lines.push(`**Extracted:** ${payload.meta.extractedAt} | ${payload.meta.totalTweets} tweets | ${payload.meta.totalLinks} links | ${payload.meta.totalImages} images | ~${payload.meta.estimatedTokens} tokens`);
     lines.push(`**Tool:** ${payload.meta.tool}`);
+    lines.push(`**Format:** ${structureAnalysis.structure}`);
     lines.push('');
     lines.push('---');
     lines.push('');
 
     if (payload.meta.pageType === 'post') {
-      if (payload.mainPost) {
-        lines.push('## MAIN POST');
-        lines.push(formatTweetMarkdown(payload.mainPost, '', options));
-        lines.push('');
-        lines.push('---');
-        lines.push('');
-      }
-
-      if (payload.replies.length > 0) {
-        lines.push(`## REPLIES (${payload.replies.length})`);
-        lines.push('');
-        for (let i = 0; i < payload.replies.length; i++) {
-          const r = payload.replies[i];
-          const depthStr = r.threading.depth > 1 ? ` [depth: ${r.threading.depth}]` : '';
-          const opStr = r.threading.isOp ? ' (OP)' : '';
-          const timeLabel = options.includeTimestamps !== false ? ` · ${r.timestamp.display ?? 'null'}` : '';
-          lines.push(`### ${i + 1}. ${r.author.handle ?? 'null'}${opStr}${timeLabel}${depthStr}`);
-          lines.push(formatTweetMarkdown(r, '', options));
-          lines.push('');
-        }
-        lines.push('---');
-        lines.push('');
+      // Use intelligent structure-specific formatting
+      if (structureAnalysis.format === 'academic') {
+        formatAcademicStructure(payload, lines, options, structureAnalysis);
+      } else if (structureAnalysis.format === 'qa') {
+        formatQAStructure(payload, lines, options, structureAnalysis);
+      } else if (structureAnalysis.format === 'chat') {
+        formatChatStructure(payload, lines, options, structureAnalysis);
+      } else if (structureAnalysis.format === 'technical') {
+        formatTechnicalStructure(payload, lines, options, structureAnalysis);
+      } else {
+        formatNarrativeStructure(payload, lines, options, structureAnalysis);
       }
 
     } else if (payload.meta.pageType === 'profile') {
@@ -1463,8 +2405,246 @@
   }
 
   // =========================================================================
+  // TELEMETRY & QUALITY SCORING
+  // =========================================================================
+
+  /**
+   * Tracks extraction quality and generates health reports
+   */
+  const EXTRACTION_TELEMETRY = {
+    currentSession: {
+      startTime: Date.now(),
+      pageType: null,
+      selectorsUsed: new Set(),
+      fallbacksTriggered: 0,
+      selfHealingUsed: 0,
+      extractionQuality: 1.0,
+      errors: []
+    },
+
+    /**
+     * Calculate quality score for a tweet extraction (0-1).
+     * Weighted across five dimensions of extraction completeness.
+     */
+    calculateTweetQuality: function(tweet) {
+      if (!tweet) return 0;
+
+      // Each dimension scores 0-1, then weighted average
+      const dimensions = [];
+
+      // 1. Author identity (weight: 3) — most critical signal
+      const hasName = !!tweet.author?.name;
+      const hasHandle = !!tweet.author?.handle;
+      if (hasName && hasHandle) dimensions.push({ score: 1.0, weight: 3 });
+      else if (hasHandle) dimensions.push({ score: 0.7, weight: 3 });
+      else if (hasName) dimensions.push({ score: 0.5, weight: 3 });
+      else dimensions.push({ score: 0.1, weight: 3 });
+
+      // 2. Content body (weight: 3) — equally critical
+      if (tweet.text && tweet.text.length > 0) {
+        dimensions.push({ score: 1.0, weight: 3 });
+      } else {
+        dimensions.push({ score: 0.2, weight: 3 });
+      }
+
+      // 3. Temporal context (weight: 1)
+      const hasTime = !!(tweet.timestamp?.iso || tweet.timestamp?.display);
+      dimensions.push({ score: hasTime ? 1.0 : 0.5, weight: 1 });
+
+      // 4. Engagement metrics (weight: 1)
+      const engagementValues = Object.values(tweet.engagement || {});
+      const hasEngagement = engagementValues.some(v => v !== null && v !== undefined);
+      dimensions.push({ score: hasEngagement ? 1.0 : 0.6, weight: 1 });
+
+      // 5. Media/link consistency (weight: 2) — text mentions URLs but none extracted
+      const textMentionsMedia = tweet.text && (
+        tweet.text.includes('http') || tweet.text.includes('pic.twitter') || tweet.text.includes('t.co/')
+      );
+      const hasMedia = (tweet.links?.length > 0) || (tweet.images?.length > 0) || (tweet.linkCard);
+      if (textMentionsMedia && !hasMedia) {
+        dimensions.push({ score: 0.4, weight: 2 });
+      } else {
+        dimensions.push({ score: 1.0, weight: 2 });
+      }
+
+      const totalWeight = dimensions.reduce((s, d) => s + d.weight, 0);
+      const weightedSum = dimensions.reduce((s, d) => s + d.score * d.weight, 0);
+      return totalWeight > 0 ? weightedSum / totalWeight : 1.0;
+    },
+
+    /**
+     * Generate extraction health report
+     */
+    generateHealthReport: function(extractedData) {
+      const sessionCopy = { ...this.currentSession };
+      sessionCopy.selectorsUsed = Array.from(this.currentSession.selectorsUsed);
+
+      const report = {
+        systemHealth: SELECTOR_HEALTH.getSystemHealth(),
+        sessionStats: sessionCopy,
+        recommendations: [],
+        criticalIssues: []
+      };
+
+      // Analyze selector performance
+      const selectorKeys = Object.keys(SELECTOR_HEALTH.stats);
+      for (const key of selectorKeys) {
+        const bestSelector = SELECTOR_HEALTH.getBestSelector(key);
+        const health = SELECTOR_HEALTH.getHealthScore(key, bestSelector);
+
+        if (health < 0.5) {
+          report.criticalIssues.push({
+            type: 'selector_health',
+            selector: key,
+            health: health,
+            message: `Selector '${key}' has poor health (${Math.round(health * 100)}%). Consider updating.`
+          });
+        }
+      }
+
+      // Quality analysis
+      if (report.systemHealth < 0.8) {
+        report.recommendations.push({
+          type: 'system_health',
+          message: 'Overall system health is degraded. Consider updating selectors.',
+          severity: 'high'
+        });
+      }
+
+      // Session analysis
+      if (this.currentSession.fallbacksTriggered > 10) {
+        report.recommendations.push({
+          type: 'fallback_usage',
+          message: `${this.currentSession.fallbacksTriggered} selector fallbacks triggered. Primary selectors may be outdated.`,
+          severity: 'medium'
+        });
+      }
+
+      if (this.currentSession.selfHealingUsed > 5) {
+        report.recommendations.push({
+          type: 'self_healing',
+          message: `${this.currentSession.selfHealingUsed} self-healing operations performed. DOM structure may have changed significantly.`,
+          severity: 'high'
+        });
+      }
+
+      return report;
+    },
+
+    /**
+     * Record extraction completion and persist telemetry for popup
+     */
+    recordExtractionComplete: function(pageType, extractedData, qualityScore) {
+      this.currentSession.pageType = pageType;
+      this.currentSession.extractionQuality = qualityScore;
+
+      const healthReport = this.generateHealthReport(extractedData);
+
+      // Determine health level to persist for popup
+      const session = this.currentSession;
+      let healthLevel = 'healthy';
+      if (qualityScore < 0.5 || session.selfHealingUsed > 10) {
+        healthLevel = 'needs_attention';
+      } else if (qualityScore < 0.8 || session.fallbacksTriggered > 5 || session.selfHealingUsed > 3) {
+        healthLevel = 'monitoring';
+      }
+      healthReport.healthLevel = healthLevel;
+
+      try {
+        chrome.storage.local.set({
+          'lastHealthReport': healthReport,
+          'lastExtractionTime': Date.now(),
+          'extractionQuality': qualityScore
+        });
+      } catch (e) {
+        // Silent fail — telemetry is non-critical
+      }
+    },
+
+    /**
+     * Reset session stats for new extraction
+     */
+    resetSession: function() {
+      this.currentSession = {
+        startTime: Date.now(),
+        pageType: null,
+        selectorsUsed: new Set(),
+        fallbacksTriggered: 0,
+        selfHealingUsed: 0,
+        extractionQuality: 1.0,
+        errors: []
+      };
+    }
+  };
+
+  // =========================================================================
+  // PERIODIC DOM VALIDATION & CHANGE MONITORING
+  // =========================================================================
+
+  /**
+   * Monitors DOM changes and validates selector health
+   */
+  const DOM_CHANGE_MONITOR = {
+    validationInterval: 24 * 60 * 60 * 1000, // 24 hours
+    lastValidation: null,
+
+    /**
+     * Run periodic validation of all selectors
+     */
+    validateSelectors: function() {
+      const now = Date.now();
+      if (this.lastValidation && (now - this.lastValidation) < this.validationInterval) {
+        return; // Too soon
+      }
+
+      this.lastValidation = now;
+      const validationResults = {};
+
+      // Test each selector against current DOM
+      for (const [key, selector] of Object.entries(SELECTORS)) {
+        try {
+          const elements = document.querySelectorAll(selector);
+          const success = elements.length > 0;
+
+          validationResults[key] = {
+            selector: selector,
+            found: elements.length,
+            success: success,
+            timestamp: now
+          };
+
+          // Update health stats
+          SELECTOR_HEALTH.recordUsage(key, selector, success, 1.0, { validation: true });
+        } catch (e) {
+          validationResults[key] = {
+            selector: selector,
+            error: e.message,
+            timestamp: now
+          };
+        }
+      }
+
+      // Store validation results
+      try {
+        chrome.storage.local.set({
+          'lastValidation': validationResults,
+          'validationTimestamp': now
+        });
+      } catch (e) {
+        // Silent fail
+      }
+
+      return validationResults;
+    },
+
+  };
+
+  // =========================================================================
   // MAIN — Execute extraction and return result
   // =========================================================================
+
+  // Initialize telemetry for this extraction session
+  EXTRACTION_TELEMETRY.resetSession();
 
   const url = window.location.href;
   const pageType = detectPageType(url);
@@ -1493,6 +2673,9 @@
       };
     }
 
+    // Piggyback selector validation on this extraction
+    DOM_CHANGE_MONITOR.validateSelectors();
+
     const payload = buildPayload(pageType, url, extractedData);
 
     // Generate all three formats from canonical payload
@@ -1510,6 +2693,32 @@
     const markdownFinal = formatMarkdown(payload);
     const plainFinal = formatPlain(payload);
 
+    // Calculate extraction quality score
+    let qualityScore = 1.0;
+    const allTweets = pageType === 'post'
+      ? [extractedData.mainPost, ...(extractedData.replies || [])].filter(Boolean)
+      : (extractedData.posts || []);
+
+    if (allTweets.length > 0) {
+      const scores = allTweets.map(t => EXTRACTION_TELEMETRY.calculateTweetQuality(t));
+      qualityScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+    }
+
+    // Record extraction completion with telemetry
+    EXTRACTION_TELEMETRY.recordExtractionComplete(pageType, extractedData, qualityScore);
+
+    // Compute system health from this session's telemetry
+    const session = EXTRACTION_TELEMETRY.currentSession;
+    const systemHealth = qualityScore;
+
+    // Determine health level for popup display
+    let healthLevel = 'healthy';
+    if (qualityScore < 0.5 || session.selfHealingUsed > 10) {
+      healthLevel = 'needs_attention';
+    } else if (qualityScore < 0.8 || session.fallbacksTriggered > 5 || session.selfHealingUsed > 3) {
+      healthLevel = 'monitoring';
+    }
+
     return {
       success: true,
       pageType: pageType,
@@ -1524,12 +2733,36 @@
       markdown: markdownFinal,
       plain: plainFinal,
       payload: payload,
+      telemetry: {
+        systemHealth: systemHealth,
+        healthLevel: healthLevel,
+        extractionQuality: qualityScore,
+        selectorsUsed: Array.from(session.selectorsUsed),
+        fallbacksTriggered: session.fallbacksTriggered,
+        selfHealingUsed: session.selfHealingUsed,
+        errors: session.errors
+      }
     };
-  } catch {
+  } catch (error) {
+    // Record error in telemetry
+    EXTRACTION_TELEMETRY.currentSession.errors.push({
+      message: error.message,
+      stack: error.stack,
+      timestamp: Date.now()
+    });
+
     return {
       success: false,
       error: 'extraction_failed',
       message: 'Extraction failed — try refreshing the page and packaging again',
+      telemetry: {
+        systemHealth: 0,
+        healthLevel: 'needs_attention',
+        extractionQuality: 0,
+        error: error.message,
+        fallbacksTriggered: EXTRACTION_TELEMETRY.currentSession.fallbacksTriggered,
+        selfHealingUsed: EXTRACTION_TELEMETRY.currentSession.selfHealingUsed
+      }
     };
   }
 
