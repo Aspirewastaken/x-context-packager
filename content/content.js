@@ -71,6 +71,565 @@
   };
 
   // =========================================================================
+  // DOM RESILIENCE & ADAPTATION SYSTEM
+  // =========================================================================
+
+  /**
+   * SELECTOR_FALLBACKS — Multiple strategies per content type for resilience
+   * Each fallback includes: selector, confidence score, extraction strategy
+   */
+  const SELECTOR_FALLBACKS = {
+    // Tweet containers - most critical selectors
+    tweet: [
+      { selector: '[data-testid="tweet"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[role="group"][aria-labelledby]', confidence: 0.9, strategy: 'role-based' },
+      { selector: 'article[data-testid]', confidence: 0.8, strategy: 'semantic' },
+      { selector: '[data-testid*="tweet"]', confidence: 0.7, strategy: 'wildcard' },
+      { selector: 'article:has([role="link"])', confidence: 0.6, strategy: 'has-link' }
+    ],
+
+    tweetText: [
+      { selector: '[data-testid="tweetText"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="Tweet-User-Text"]', confidence: 0.9, strategy: 'user-text' },
+      { selector: '[role="group"] [lang]', confidence: 0.8, strategy: 'lang-attr' },
+      { selector: 'article [lang]', confidence: 0.7, strategy: 'article-lang' },
+      { selector: '[data-testid*="text"]', confidence: 0.6, strategy: 'wildcard-text' }
+    ],
+
+    userName: [
+      { selector: '[data-testid="User-Name"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[role="link"][aria-label*="View profile"]', confidence: 0.9, strategy: 'aria-profile' },
+      { selector: 'article [role="link"]:first-child', confidence: 0.8, strategy: 'first-link' },
+      { selector: '[data-testid*="user"]', confidence: 0.7, strategy: 'wildcard-user' },
+      { selector: 'article a[href*="/"]', confidence: 0.6, strategy: 'href-profile' }
+    ],
+
+    // Media selectors with fallbacks
+    tweetPhoto: [
+      { selector: '[data-testid="tweetPhoto"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="Tweet-User-Photo"]', confidence: 0.9, strategy: 'user-photo' },
+      { selector: 'article img[src*="pbs.twimg.com/media"]', confidence: 0.8, strategy: 'pbs-media' },
+      { selector: '[role="group"] img', confidence: 0.7, strategy: 'group-images' },
+      { selector: 'article img:not([src*="profile_images"])', confidence: 0.6, strategy: 'non-profile' }
+    ],
+
+    // Engagement selectors - critical for metrics
+    reply: [
+      { selector: '[data-testid="reply"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[aria-label*="repl"]', confidence: 0.9, strategy: 'aria-reply' },
+      { selector: 'article [role="group"] [role="button"]:first-child', confidence: 0.8, strategy: 'first-button' },
+      { selector: '[data-testid*="reply"]', confidence: 0.7, strategy: 'wildcard-reply' },
+      { selector: 'button[aria-label*="Reply"]', confidence: 0.6, strategy: 'button-reply' }
+    ],
+
+    like: [
+      { selector: '[data-testid="like"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="unlike"]', confidence: 0.9, strategy: 'unlike-fallback' },
+      { selector: '[aria-label*="Like"]', confidence: 0.8, strategy: 'aria-like' },
+      { selector: 'article [role="group"] [role="button"]:nth-child(3)', confidence: 0.7, strategy: 'nth-button' },
+      { selector: 'button[aria-label*="Like"]', confidence: 0.6, strategy: 'button-like' }
+    ],
+
+    retweet: [
+      { selector: '[data-testid="retweet"], [data-testid="repost"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[aria-label*="retweet" i]', confidence: 0.9, strategy: 'aria-retweet' },
+      { selector: 'article [role="group"] [role="button"]:nth-child(2)', confidence: 0.8, strategy: 'nth-button' },
+      { selector: '[data-testid*="retweet"]', confidence: 0.7, strategy: 'wildcard-retweet' },
+      { selector: 'button[aria-label*="Repost"]', confidence: 0.6, strategy: 'button-repost' }
+    ],
+
+    // Verification badges
+    verifiedBadge: [
+      { selector: '[data-testid="icon-verified"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[aria-label*="verified"]', confidence: 0.9, strategy: 'aria-verified' },
+      { selector: 'svg[viewBox*="16"]:has(path[d*="M22.25"])', confidence: 0.8, strategy: 'svg-path' },
+      { selector: '[role="link"] svg[aria-hidden="true"] + *', confidence: 0.7, strategy: 'sibling-svg' },
+      { selector: '[data-testid*="verified"]', confidence: 0.6, strategy: 'wildcard-verified' }
+    ],
+
+    // Embedded content
+    quoteTweet: [
+      { selector: '[data-testid="quoteTweet"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[role="link"][aria-label*="quote"]', confidence: 0.9, strategy: 'aria-quote' },
+      { selector: 'article article', confidence: 0.8, strategy: 'nested-article' },
+      { selector: '[data-testid*="quote"]', confidence: 0.7, strategy: 'wildcard-quote' },
+      { selector: '[role="group"] [role="group"]', confidence: 0.6, strategy: 'nested-group' }
+    ],
+
+    cardWrapper: [
+      { selector: '[data-testid="card.wrapper"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="cardContainer"]', confidence: 0.9, strategy: 'container' },
+      { selector: '[role="link"][aria-label*="card"]', confidence: 0.8, strategy: 'aria-card' },
+      { selector: 'article a[href*="://"]:not([href*="@"])', confidence: 0.7, strategy: 'external-link' },
+      { selector: '[data-testid*="card"]', confidence: 0.6, strategy: 'wildcard-card' }
+    ],
+
+    // Profile selectors
+    profileHeader: [
+      { selector: '[data-testid="UserProfileHeader_Items"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="userActions"]', confidence: 0.9, strategy: 'user-actions' },
+      { selector: '[role="banner"] [role="group"]', confidence: 0.8, strategy: 'banner-group' },
+      { selector: '[data-testid*="profile"]', confidence: 0.7, strategy: 'wildcard-profile' },
+      { selector: 'main header', confidence: 0.6, strategy: 'main-header' }
+    ],
+
+    profileBio: [
+      { selector: '[data-testid="UserDescription"]', confidence: 1.0, strategy: 'primary' },
+      { selector: '[data-testid="userBio"]', confidence: 0.9, strategy: 'user-bio' },
+      { selector: '[role="banner"] p, [role="banner"] span:not([role])', confidence: 0.8, strategy: 'banner-text' },
+      { selector: '[data-testid*="bio"]', confidence: 0.7, strategy: 'wildcard-bio' },
+      { selector: 'main header p', confidence: 0.6, strategy: 'header-para' }
+    ]
+  };
+
+  // =========================================================================
+  // SELECTOR HEALTH MONITORING & TELEMETRY
+  // =========================================================================
+
+  /**
+   * Tracks selector success/failure rates for resilience optimization
+   */
+  const SELECTOR_HEALTH = {
+    // In-memory tracking (persisted via chrome.storage.local)
+    stats: {},
+    lastValidation: null,
+
+    /**
+     * Record selector usage and success/failure
+     */
+    recordUsage: function(selectorKey, selector, success, confidence = 1.0, context = {}) {
+      if (!this.stats[selectorKey]) {
+        this.stats[selectorKey] = {};
+      }
+      if (!this.stats[selectorKey][selector]) {
+        this.stats[selectorKey][selector] = {
+          attempts: 0,
+          successes: 0,
+          failures: 0,
+          avgConfidence: 0,
+          lastUsed: null,
+          context: context
+        };
+      }
+
+      const stat = this.stats[selectorKey][selector];
+      stat.attempts++;
+      stat.lastUsed = Date.now();
+
+      if (success) {
+        stat.successes++;
+      } else {
+        stat.failures++;
+      }
+
+      // Update rolling average confidence
+      stat.avgConfidence = (stat.avgConfidence * (stat.attempts - 1) + confidence) / stat.attempts;
+
+      this.persistStats();
+    },
+
+    /**
+     * Get success rate for a selector
+     */
+    getSuccessRate: function(selectorKey, selector) {
+      const stat = this.stats[selectorKey]?.[selector];
+      if (!stat || stat.attempts === 0) return 0;
+      return stat.successes / stat.attempts;
+    },
+
+    /**
+     * Get health score (0-1) combining success rate and confidence
+     */
+    getHealthScore: function(selectorKey, selector) {
+      const successRate = this.getSuccessRate(selectorKey, selector);
+      const stat = this.stats[selectorKey]?.[selector];
+      const confidence = stat?.avgConfidence || 0;
+      return (successRate * 0.7) + (confidence * 0.3);
+    },
+
+    /**
+     * Find best performing selector for a key
+     */
+    getBestSelector: function(selectorKey) {
+      const selectors = this.stats[selectorKey];
+      if (!selectors) return null;
+
+      let bestSelector = null;
+      let bestScore = -1;
+
+      for (const [selector, stat] of Object.entries(selectors)) {
+        const score = this.getHealthScore(selectorKey, selector);
+        if (score > bestScore && stat.attempts > 2) { // Require minimum attempts
+          bestScore = score;
+          bestSelector = selector;
+        }
+      }
+
+      return bestSelector;
+    },
+
+    /**
+     * Persist stats to chrome storage
+     */
+    persistStats: function() {
+      try {
+        chrome.storage.local.set({
+          'selectorHealth': this.stats,
+          'lastHealthUpdate': Date.now()
+        });
+      } catch (e) {
+        // Silent fail - telemetry is nice-to-have
+      }
+    },
+
+    /**
+     * Load stats from chrome storage
+     */
+    loadStats: function() {
+      try {
+        chrome.storage.local.get(['selectorHealth', 'lastHealthUpdate'], (result) => {
+          if (result.selectorHealth) {
+            this.stats = result.selectorHealth;
+          }
+          this.lastValidation = result.lastHealthUpdate;
+        });
+      } catch (e) {
+        // Silent fail
+      }
+    },
+
+    /**
+     * Get overall system health score (0-1)
+     */
+    getSystemHealth: function() {
+      const keys = Object.keys(this.stats);
+      if (keys.length === 0) return 1.0; // Default to healthy
+
+      let totalScore = 0;
+      let count = 0;
+
+      for (const key of keys) {
+        const bestSelector = this.getBestSelector(key);
+        if (bestSelector) {
+          totalScore += this.getHealthScore(key, bestSelector);
+          count++;
+        }
+      }
+
+      return count > 0 ? totalScore / count : 1.0;
+    }
+  };
+
+  // Load health stats on initialization
+  SELECTOR_HEALTH.loadStats();
+
+  // =========================================================================
+  // SELF-HEALING SELECTOR DETECTION
+  // =========================================================================
+
+  /**
+   * Automatically analyzes DOM when selectors fail and generates fallback strategies
+   */
+  const SELF_HEALING_DETECTOR = {
+    /**
+     * Analyze DOM structure around failed selector to find alternatives
+     */
+    analyzeDOMForAlternatives: function(selectorKey, contextElement, expectedContent = null) {
+      const alternatives = [];
+
+      try {
+        // Strategy 1: Look for similar data-testid attributes
+        const testIds = contextElement.querySelectorAll('[data-testid]');
+        for (const el of testIds) {
+          const testid = el.getAttribute('data-testid');
+          if (testid && testid.toLowerCase().includes(selectorKey.toLowerCase().replace(/[^a-z]/g, ''))) {
+            alternatives.push({
+              selector: `[data-testid="${testid}"]`,
+              confidence: 0.8,
+              strategy: 'similar-testid',
+              context: `Found similar testid: ${testid}`
+            });
+          }
+        }
+
+        // Strategy 2: Look for aria-label patterns
+        const ariaElements = contextElement.querySelectorAll('[aria-label]');
+        for (const el of ariaElements) {
+          const label = el.getAttribute('aria-label').toLowerCase();
+          if (label.includes(selectorKey.toLowerCase().replace(/[^a-z]/g, ''))) {
+            alternatives.push({
+              selector: `[aria-label*="${selectorKey.toLowerCase().replace(/[^a-z]/g, '')}"]`,
+              confidence: 0.7,
+              strategy: 'aria-pattern',
+              context: `Found aria-label: ${label}`
+            });
+          }
+        }
+
+        // Strategy 3: Role-based alternatives
+        const roleElements = contextElement.querySelectorAll('[role]');
+        const relevantRoles = {
+          tweet: ['group', 'article'],
+          userName: ['link'],
+          tweetText: ['group'],
+          reply: ['button'],
+          like: ['button'],
+          retweet: ['button']
+        };
+
+        const expectedRoles = relevantRoles[selectorKey] || [];
+        for (const el of roleElements) {
+          const role = el.getAttribute('role');
+          if (expectedRoles.includes(role)) {
+            alternatives.push({
+              selector: `[role="${role}"]`,
+              confidence: 0.6,
+              strategy: 'role-based',
+              context: `Found role: ${role}`
+            });
+          }
+        }
+
+        // Strategy 4: Semantic HTML alternatives
+        const semanticSelectors = {
+          tweet: ['article', 'div[role="group"]'],
+          userName: ['a[href*="/"]', 'span'],
+          tweetText: ['[lang]', 'div', 'span'],
+          reply: ['button', '[role="button"]'],
+          like: ['button', '[role="button"]'],
+          retweet: ['button', '[role="button"]']
+        };
+
+        const semanticAlts = semanticSelectors[selectorKey] || [];
+        for (const selector of semanticAlts) {
+          const elements = contextElement.querySelectorAll(selector);
+          if (elements.length > 0) {
+            alternatives.push({
+              selector: selector,
+              confidence: 0.5,
+              strategy: 'semantic-html',
+              context: `Found ${elements.length} semantic elements`
+            });
+          }
+        }
+
+        // Strategy 5: Content-based detection (if expected content provided)
+        if (expectedContent && typeof expectedContent === 'string') {
+          const textElements = contextElement.querySelectorAll('*');
+          for (const el of textElements) {
+            const text = el.textContent?.trim();
+            if (text && text.includes(expectedContent.substring(0, 10))) {
+              // Generate a unique selector for this element
+              const uniqueSelector = this.generateUniqueSelector(el);
+              if (uniqueSelector) {
+                alternatives.push({
+                  selector: uniqueSelector,
+                  confidence: 0.9,
+                  strategy: 'content-match',
+                  context: `Found element containing: ${expectedContent.substring(0, 20)}...`
+                });
+              }
+            }
+          }
+        }
+
+        // Remove duplicates and sort by confidence
+        const unique = alternatives.filter((alt, index, self) =>
+          index === self.findIndex(a => a.selector === alt.selector)
+        );
+
+        return unique.sort((a, b) => b.confidence - a.confidence);
+
+      } catch (e) {
+        return [];
+      }
+    },
+
+    /**
+     * Generate a unique CSS selector for an element
+     */
+    generateUniqueSelector: function(element) {
+      try {
+        // Try data-testid first
+        const testid = element.getAttribute('data-testid');
+        if (testid) return `[data-testid="${testid}"]`;
+
+        // Try aria-label
+        const ariaLabel = element.getAttribute('aria-label');
+        if (ariaLabel) return `[aria-label="${ariaLabel.replace(/"/g, '\\"')}"]`;
+
+        // Try class-based selector
+        const classes = Array.from(element.classList);
+        if (classes.length > 0) {
+          const classSelector = '.' + classes.join('.');
+          // Verify uniqueness
+          if (document.querySelectorAll(classSelector).length === 1) {
+            return classSelector;
+          }
+        }
+
+        // Generate path-based selector
+        let path = [];
+        let current = element;
+
+        while (current && current !== document.body && path.length < 5) {
+          let segment = current.tagName.toLowerCase();
+
+          if (current.id) {
+            segment += `#${current.id}`;
+            path.unshift(segment);
+            break; // ID should be unique enough
+          }
+
+          const classes = Array.from(current.classList).filter(c => !c.startsWith('r-')); // Skip random classes
+          if (classes.length > 0) {
+            segment += '.' + classes[0];
+          }
+
+          // Add nth-child if needed
+          const siblings = Array.from(current.parentElement?.children || []);
+          const index = siblings.indexOf(current);
+          if (siblings.length > 1 && index >= 0) {
+            segment += `:nth-child(${index + 1})`;
+          }
+
+          path.unshift(segment);
+          current = current.parentElement;
+        }
+
+        const selector = path.join(' > ');
+        // Verify uniqueness
+        if (document.querySelectorAll(selector).length === 1) {
+          return selector;
+        }
+
+        return null;
+      } catch (e) {
+        return null;
+      }
+    },
+
+    /**
+     * Test a generated selector and return confidence score
+     */
+    testSelector: function(selector, contextElement = document) {
+      try {
+        const elements = contextElement.querySelectorAll(selector);
+        if (elements.length === 0) return 0; // No matches
+        if (elements.length === 1) return 1.0; // Perfect match
+        if (elements.length <= 3) return 0.8; // Few matches, still useful
+        if (elements.length <= 10) return 0.6; // Multiple matches, less confident
+        return 0.3; // Too many matches, low confidence
+      } catch (e) {
+        return 0; // Invalid selector
+      }
+    }
+  };
+
+  // =========================================================================
+  // RESILIENT EXTRACTION ENGINE
+  // =========================================================================
+
+  /**
+   * Enhanced querySelector that tries multiple strategies and fallbacks
+   */
+  function resilientQuerySelector(context, selectorKey, options = {}) {
+    const {
+      expectedContent = null,
+      maxAttempts = 5,
+      requireUnique = false,
+      healthTracking = true
+    } = options;
+
+    // Start with primary selector
+    const primarySelector = SELECTORS[selectorKey];
+    if (primarySelector) {
+      try {
+        const elements = context.querySelectorAll(primarySelector);
+        const success = elements.length > 0 && (!requireUnique || elements.length === 1);
+
+        if (healthTracking) {
+          SELECTOR_HEALTH.recordUsage(selectorKey, primarySelector, success, 1.0);
+        }
+
+        if (success) {
+          return requireUnique ? elements[0] : elements;
+        }
+      } catch (e) {
+        if (healthTracking) {
+          SELECTOR_HEALTH.recordUsage(selectorKey, primarySelector, false, 1.0);
+        }
+      }
+    }
+
+    // Try fallbacks from SELECTOR_FALLBACKS
+    const fallbacks = SELECTOR_FALLBACKS[selectorKey] || [];
+    for (const fallback of fallbacks.slice(0, maxAttempts)) {
+      try {
+        const elements = context.querySelectorAll(fallback.selector);
+        const success = elements.length > 0 && (!requireUnique || elements.length === 1);
+
+        if (healthTracking) {
+          SELECTOR_HEALTH.recordUsage(selectorKey, fallback.selector, success, fallback.confidence);
+        }
+
+        if (success) {
+          return requireUnique ? elements[0] : elements;
+        }
+      } catch (e) {
+        if (healthTracking) {
+          SELECTOR_HEALTH.recordUsage(selectorKey, fallback.selector, false, fallback.confidence);
+        }
+      }
+    }
+
+    // If all fallbacks failed, try self-healing detection
+    if (expectedContent || !requireUnique) {
+      const alternatives = SELF_HEALING_DETECTOR.analyzeDOMForAlternatives(
+        selectorKey,
+        context,
+        expectedContent
+      );
+
+      for (const alt of alternatives.slice(0, 3)) { // Try top 3 alternatives
+        try {
+          const confidence = SELF_HEALING_DETECTOR.testSelector(alt.selector, context);
+          if (confidence >= 0.5) { // Minimum confidence threshold
+            const elements = context.querySelectorAll(alt.selector);
+            const success = elements.length > 0 && (!requireUnique || elements.length === 1);
+
+            if (healthTracking) {
+              SELECTOR_HEALTH.recordUsage(selectorKey, alt.selector, success, confidence, alt);
+            }
+
+            if (success) {
+              return requireUnique ? elements[0] : elements;
+            }
+          }
+        } catch (e) {
+          // Continue to next alternative
+        }
+      }
+    }
+
+    return null; // All strategies failed
+  }
+
+  /**
+   * Enhanced querySelectorAll with resilience
+   */
+  function resilientQuerySelectorAll(context, selectorKey, options = {}) {
+    return resilientQuerySelector(context, selectorKey, { ...options, requireUnique: false });
+  }
+
+  /**
+   * Enhanced querySelector (single element) with resilience
+   */
+  function resilientQuerySelectorSingle(context, selectorKey, options = {}) {
+    return resilientQuerySelector(context, selectorKey, { ...options, requireUnique: true });
+  }
+
+  // =========================================================================
   // UTILITIES
   // =========================================================================
 
@@ -197,7 +756,7 @@
 
     try {
       // --- AUTHOR ---
-      const userNameEl = qs(tweetEl, SELECTORS.userName);
+      const userNameEl = resilientQuerySelectorSingle(tweetEl, 'userName');
       if (userNameEl) {
         // Display name is usually the first text span
         const nameSpans = qsa(userNameEl, 'span');
@@ -233,7 +792,7 @@
         }
 
         // Verified badge
-        const badge = qs(tweetEl, SELECTORS.verifiedBadge);
+        const badge = resilientQuerySelectorSingle(tweetEl, 'verifiedBadge');
         if (badge) {
           // Try to detect badge type from SVG fill
           const svg = qs(badge, 'svg');
@@ -256,7 +815,7 @@
       }
 
       // --- TIMESTAMP ---
-      const timeEl = qs(tweetEl, SELECTORS.timestamp);
+      const timeEl = resilientQuerySelectorSingle(tweetEl, 'timestamp');
       if (timeEl) {
         tweet.timestamp.iso = timeEl.getAttribute('datetime') || null;
         tweet.timestamp.display = timeEl.textContent?.trim() || null;
@@ -267,7 +826,7 @@
       }
 
       // --- TEXT ---
-      const textEl = qs(tweetEl, SELECTORS.tweetText);
+      const textEl = resilientQuerySelectorSingle(tweetEl, 'tweetText');
       if (textEl) {
         tweet.text = textEl.innerText?.trim() || null;
 
@@ -299,13 +858,13 @@
       }
 
       // --- TRUNCATED ---
-      if (qs(tweetEl, SELECTORS.showMore)) {
+      if (resilientQuerySelectorSingle(tweetEl, 'showMore')) {
         tweet.flags.truncated = true;
       }
 
       // --- REPLY-TO ---
       // Look for "Replying to @handle" pattern
-      const replyingTo = qsa(tweetEl, 'a[href]');
+      const replyingTo = resilientQuerySelectorAll(tweetEl, 'replyingTo') || qsa(tweetEl, 'a[href]');
       for (const a of replyingTo) {
         const parent = a.parentElement;
         if (parent && /replying to/i.test(parent.textContent || '')) {
@@ -329,7 +888,12 @@
       }
 
       // --- IMAGES ---
-      const photoEls = qsa(tweetEl, SELECTORS.tweetPhoto + ' img');
+      let photoEls = resilientQuerySelectorAll(tweetEl, 'tweetPhoto');
+      if (!photoEls || photoEls.length === 0) {
+        photoEls = qsa(tweetEl, 'img[src*="pbs.twimg.com/media"]');
+      } else {
+        photoEls = qsa(tweetEl, SELECTORS.tweetPhoto + ' img');
+      }
       for (const img of photoEls) {
         const src = img.getAttribute('src') || '';
         const alt = img.getAttribute('alt') || '';
@@ -343,46 +907,46 @@
       }
 
       // --- VIDEO ---
-      if (qs(tweetEl, SELECTORS.videoPlayer)) {
+      if (resilientQuerySelectorSingle(tweetEl, 'videoPlayer')) {
         tweet.video = true;
       }
 
       // --- GIF ---
-      if (qs(tweetEl, SELECTORS.gifIndicator)) {
+      if (resilientQuerySelectorSingle(tweetEl, 'gifIndicator')) {
         tweet.gif = true;
       }
 
       // --- QUOTED TWEET ---
-      const quoteEl = qs(tweetEl, SELECTORS.quoteTweet);
+      const quoteEl = resilientQuerySelectorSingle(tweetEl, 'quoteTweet');
       if (quoteEl) {
         tweet.quotedTweet = extractQuotedTweet(quoteEl);
       }
 
       // --- LINK CARD ---
-      const cardEl = qs(tweetEl, SELECTORS.cardWrapper);
+      const cardEl = resilientQuerySelectorSingle(tweetEl, 'cardWrapper');
       if (cardEl && !quoteEl) { // Don't extract card if it's a quoted tweet
         tweet.linkCard = extractLinkCard(cardEl);
       }
 
       // --- COMMUNITY NOTE ---
-      const noteEl = qs(tweetEl, SELECTORS.communityNote);
+      const noteEl = resilientQuerySelectorSingle(tweetEl, 'communityNote');
       if (noteEl) {
         tweet.communityNote = textOf(noteEl);
         tweet.flags.hasCommunityNote = true;
       }
 
       // --- POLL ---
-      const pollEl = qs(tweetEl, SELECTORS.poll);
+      const pollEl = resilientQuerySelectorSingle(tweetEl, 'poll');
       if (pollEl) {
         tweet.poll = extractPoll(pollEl);
       }
 
       // --- ENGAGEMENT ---
       // Try aria-label approach on engagement buttons
-      const replyBtn = qs(tweetEl, SELECTORS.reply);
-      const retweetBtn = qs(tweetEl, SELECTORS.retweet);
-      const likeBtn = qs(tweetEl, SELECTORS.like) || qs(tweetEl, SELECTORS.unlike);
-      const bookmarkBtn = qs(tweetEl, SELECTORS.bookmark);
+      const replyBtn = resilientQuerySelectorSingle(tweetEl, 'reply');
+      const retweetBtn = resilientQuerySelectorSingle(tweetEl, 'retweet');
+      const likeBtn = resilientQuerySelectorSingle(tweetEl, 'like') || resilientQuerySelectorSingle(tweetEl, 'unlike');
+      const bookmarkBtn = resilientQuerySelectorSingle(tweetEl, 'bookmark');
 
       tweet.engagement.replies = parseEngagement(replyBtn);
       tweet.engagement.retweets = parseEngagement(retweetBtn);
@@ -400,7 +964,7 @@
       }
 
       // --- SENSITIVE ---
-      if (qs(tweetEl, SELECTORS.sensitiveWarning)) {
+      if (resilientQuerySelectorSingle(tweetEl, 'sensitiveWarning')) {
         tweet.flags.sensitive = true;
       }
 
@@ -434,7 +998,7 @@
       }
 
       // Text
-      const textEl = qs(quoteEl, SELECTORS.tweetText);
+      const textEl = resilientQuerySelectorSingle(quoteEl, 'tweetText');
       if (textEl) {
         qt.text = textEl.innerText?.trim() || null;
         // Links
@@ -454,7 +1018,7 @@
       }
 
       // Verified
-      if (qs(quoteEl, SELECTORS.verifiedBadge)) {
+      if (resilientQuerySelectorSingle(quoteEl, 'verifiedBadge')) {
         qt.author.verified = 'blue';
       }
 
@@ -538,7 +1102,7 @@
    */
   function extractPostPage() {
     try {
-      const tweetEls = qsa(document, SELECTORS.tweet);
+      const tweetEls = resilientQuerySelectorAll(document, 'tweet');
       if (tweetEls.length === 0) {
         return { error: 'No tweets found on this page' };
       }
@@ -616,7 +1180,7 @@
 
       // Detect reply sort mode
       let replySortMode = 'relevance';
-      const activeTab = qs(document, SELECTORS.replySortTab);
+      const activeTab = resilientQuerySelectorSingle(document, 'replySortTab');
       if (activeTab) {
         const tabText = (activeTab.textContent || '').toLowerCase();
         if (tabText.includes('recent') || tabText.includes('latest')) {
@@ -647,7 +1211,7 @@
       };
 
       // Profile name
-      const nameEl = qs(document, SELECTORS.profileName);
+      const nameEl = resilientQuerySelectorSingle(document, 'profileName');
       if (nameEl) {
         const spans = qsa(nameEl, 'span');
         for (const span of spans) {
@@ -661,13 +1225,13 @@
       }
 
       // Bio
-      const bioEl = qs(document, SELECTORS.profileBio);
+      const bioEl = resilientQuerySelectorSingle(document, 'profileBio');
       if (bioEl) {
         profile.bio = textOf(bioEl) || null;
       }
 
       // Header items (location, website, joined date)
-      const headerEl = qs(document, SELECTORS.profileHeader);
+      const headerEl = resilientQuerySelectorSingle(document, 'profileHeader');
       if (headerEl) {
         const items = qsa(headerEl, 'span');
         for (const item of items) {
@@ -683,7 +1247,7 @@
       }
 
       // Follower/following counts
-      const followLinks = qsa(document, SELECTORS.profileFollowLinks);
+      const followLinks = resilientQuerySelectorAll(document, 'profileFollowLinks');
       for (const link of followLinks) {
         const href = link.getAttribute('href') || '';
         const countSpan = qs(link, 'span span');
@@ -696,7 +1260,7 @@
       }
 
       // Timeline posts
-      const tweetEls = qsa(document, SELECTORS.tweet);
+      const tweetEls = resilientQuerySelectorAll(document, 'tweet');
       const posts = [];
       for (let i = 0; i < tweetEls.length; i++) {
         posts.push(extractTweet(tweetEls[i], { depth: 0, position: i + 1, isOp: false }));
@@ -1774,8 +2338,323 @@
   }
 
   // =========================================================================
+  // TELEMETRY & QUALITY SCORING
+  // =========================================================================
+
+  /**
+   * Tracks extraction quality and generates health reports
+   */
+  const EXTRACTION_TELEMETRY = {
+    currentSession: {
+      startTime: Date.now(),
+      pageType: null,
+      selectorsUsed: new Set(),
+      fallbacksTriggered: 0,
+      selfHealingUsed: 0,
+      extractionQuality: 1.0,
+      errors: []
+    },
+
+    /**
+     * Calculate quality score for a tweet extraction (0-1)
+     */
+    calculateTweetQuality: function(tweet) {
+      let score = 1.0;
+      let factors = 0;
+
+      // Author completeness (name + handle)
+      if (tweet.author.name && tweet.author.handle) {
+        score *= 1.0;
+      } else if (tweet.author.name || tweet.author.handle) {
+        score *= 0.7;
+      } else {
+        score *= 0.3;
+      }
+      factors++;
+
+      // Text presence
+      if (!tweet.text) {
+        score *= 0.5;
+        factors++;
+      }
+
+      // Timestamp presence
+      if (!tweet.timestamp.iso && !tweet.timestamp.display) {
+        score *= 0.8;
+        factors++;
+      }
+
+      // Engagement data presence
+      const hasEngagement = Object.values(tweet.engagement).some(v => v !== null);
+      if (!hasEngagement) {
+        score *= 0.9;
+        factors++;
+      }
+
+      // Links/images presence (if expected)
+      if (tweet.links.length === 0 && tweet.images.length === 0 && tweet.text &&
+          (tweet.text.includes('http') || tweet.text.includes('pbs.twimg.com'))) {
+        score *= 0.7; // Expected media but not found
+        factors++;
+      }
+
+      return factors > 0 ? score : 1.0;
+    },
+
+    /**
+     * Generate extraction health report
+     */
+    generateHealthReport: function(extractedData) {
+      const report = {
+        systemHealth: SELECTOR_HEALTH.getSystemHealth(),
+        sessionStats: { ...this.currentSession },
+        recommendations: [],
+        criticalIssues: []
+      };
+
+      // Analyze selector performance
+      const selectorKeys = Object.keys(SELECTOR_HEALTH.stats);
+      for (const key of selectorKeys) {
+        const bestSelector = SELECTOR_HEALTH.getBestSelector(key);
+        const health = SELECTOR_HEALTH.getHealthScore(key, bestSelector);
+
+        if (health < 0.5) {
+          report.criticalIssues.push({
+            type: 'selector_health',
+            selector: key,
+            health: health,
+            message: `Selector '${key}' has poor health (${Math.round(health * 100)}%). Consider updating.`
+          });
+        }
+      }
+
+      // Quality analysis
+      if (report.systemHealth < 0.8) {
+        report.recommendations.push({
+          type: 'system_health',
+          message: 'Overall system health is degraded. Consider updating selectors.',
+          severity: 'high'
+        });
+      }
+
+      // Session analysis
+      if (this.currentSession.fallbacksTriggered > 10) {
+        report.recommendations.push({
+          type: 'fallback_usage',
+          message: `${this.currentSession.fallbacksTriggered} selector fallbacks triggered. Primary selectors may be outdated.`,
+          severity: 'medium'
+        });
+      }
+
+      if (this.currentSession.selfHealingUsed > 5) {
+        report.recommendations.push({
+          type: 'self_healing',
+          message: `${this.currentSession.selfHealingUsed} self-healing operations performed. DOM structure may have changed significantly.`,
+          severity: 'high'
+        });
+      }
+
+      return report;
+    },
+
+    /**
+     * Record extraction completion
+     */
+    recordExtractionComplete: function(pageType, extractedData, qualityScore) {
+      this.currentSession.pageType = pageType;
+      this.currentSession.extractionQuality = qualityScore;
+
+      // Generate and store health report
+      const healthReport = this.generateHealthReport(extractedData);
+
+      try {
+        chrome.storage.local.set({
+          'lastHealthReport': healthReport,
+          'lastExtractionTime': Date.now(),
+          'extractionQuality': qualityScore
+        });
+      } catch (e) {
+        // Silent fail
+      }
+    },
+
+    /**
+     * Reset session stats for new extraction
+     */
+    resetSession: function() {
+      this.currentSession = {
+        startTime: Date.now(),
+        pageType: null,
+        selectorsUsed: new Set(),
+        fallbacksTriggered: 0,
+        selfHealingUsed: 0,
+        extractionQuality: 1.0,
+        errors: []
+      };
+    }
+  };
+
+  // =========================================================================
+  // PERIODIC DOM VALIDATION & CHANGE MONITORING
+  // =========================================================================
+
+  /**
+   * Monitors DOM changes and validates selector health
+   */
+  const DOM_CHANGE_MONITOR = {
+    validationInterval: 24 * 60 * 60 * 1000, // 24 hours
+    lastValidation: null,
+
+    /**
+     * Run periodic validation of all selectors
+     */
+    validateSelectors: function() {
+      const now = Date.now();
+      if (this.lastValidation && (now - this.lastValidation) < this.validationInterval) {
+        return; // Too soon
+      }
+
+      this.lastValidation = now;
+      const validationResults = {};
+
+      // Test each selector against current DOM
+      for (const [key, selector] of Object.entries(SELECTORS)) {
+        try {
+          const elements = document.querySelectorAll(selector);
+          const success = elements.length > 0;
+
+          validationResults[key] = {
+            selector: selector,
+            found: elements.length,
+            success: success,
+            timestamp: now
+          };
+
+          // Update health stats
+          SELECTOR_HEALTH.recordUsage(key, selector, success, 1.0, { validation: true });
+        } catch (e) {
+          validationResults[key] = {
+            selector: selector,
+            error: e.message,
+            timestamp: now
+          };
+        }
+      }
+
+      // Store validation results
+      try {
+        chrome.storage.local.set({
+          'lastValidation': validationResults,
+          'validationTimestamp': now
+        });
+      } catch (e) {
+        // Silent fail
+      }
+
+      return validationResults;
+    },
+
+    /**
+     * Check for DOM structure changes since last validation
+     */
+    detectChanges: function() {
+      // This would compare current DOM structure to baseline
+      // For now, just run validation
+      return this.validateSelectors();
+    },
+
+    /**
+     * Schedule periodic validation (runs on extension startup)
+     */
+    scheduleValidation: function() {
+      // Run initial validation
+      setTimeout(() => this.validateSelectors(), 5000); // 5 second delay
+
+      // Schedule future validations
+      setInterval(() => this.validateSelectors(), this.validationInterval);
+    }
+  };
+
+  // =========================================================================
+  // COMMUNITY CONTRIBUTION PIPELINE
+  // =========================================================================
+
+  /**
+   * Allows community-sourced selector updates and validation
+   */
+  const COMMUNITY_CONTRIBUTIONS = {
+    /**
+     * Submit a selector update for community validation
+     */
+    submitSelectorUpdate: function(selectorKey, newSelector, contributorInfo = {}) {
+      const submission = {
+        selectorKey: selectorKey,
+        newSelector: newSelector,
+        contributor: contributorInfo,
+        submittedAt: Date.now(),
+        validationResults: null,
+        status: 'pending'
+      };
+
+      try {
+        // In a real implementation, this would send to a server
+        // For now, store locally for manual review
+        chrome.storage.local.get(['communitySubmissions'], (result) => {
+          const submissions = result.communitySubmissions || [];
+          submissions.push(submission);
+
+          chrome.storage.local.set({
+            'communitySubmissions': submissions
+          });
+        });
+      } catch (e) {
+        // Silent fail
+      }
+    },
+
+    /**
+     * Validate community submissions
+     */
+    validateSubmissions: function() {
+      // In a real system, this would run automated tests
+      // For now, just mark as validated
+      try {
+        chrome.storage.local.get(['communitySubmissions'], (result) => {
+          const submissions = result.communitySubmissions || [];
+          submissions.forEach(sub => {
+            if (sub.status === 'pending') {
+              // Basic validation: check if selector is syntactically valid
+              try {
+                document.querySelectorAll(sub.newSelector);
+                sub.status = 'validated';
+                sub.validatedAt = Date.now();
+              } catch (e) {
+                sub.status = 'invalid';
+                sub.error = e.message;
+              }
+            }
+          });
+
+          chrome.storage.local.set({
+            'communitySubmissions': submissions
+          });
+        });
+      } catch (e) {
+        // Silent fail
+      }
+    }
+  };
+
+  // Initialize monitoring systems
+  DOM_CHANGE_MONITOR.scheduleValidation();
+  COMMUNITY_CONTRIBUTIONS.validateSubmissions();
+
+  // =========================================================================
   // MAIN — Execute extraction and return result
   // =========================================================================
+
+  // Initialize telemetry for this extraction session
+  EXTRACTION_TELEMETRY.resetSession();
 
   const url = window.location.href;
   const pageType = detectPageType(url);
@@ -1821,6 +2700,18 @@
     const markdownFinal = formatMarkdown(payload);
     const plainFinal = formatPlain(payload);
 
+    // Calculate extraction quality score
+    let qualityScore = 1.0;
+    if (pageType === 'post' && extractedData.mainPost) {
+      qualityScore = EXTRACTION_TELEMETRY.calculateTweetQuality(extractedData.mainPost);
+    }
+
+    // Record extraction completion with telemetry
+    EXTRACTION_TELEMETRY.recordExtractionComplete(pageType, extractedData, qualityScore);
+
+    // Get current system health
+    const systemHealth = SELECTOR_HEALTH.getSystemHealth();
+
     return {
       success: true,
       pageType: pageType,
@@ -1835,12 +2726,30 @@
       markdown: markdownFinal,
       plain: plainFinal,
       payload: payload,
+      telemetry: {
+        systemHealth: systemHealth,
+        extractionQuality: qualityScore,
+        selectorsUsed: Array.from(EXTRACTION_TELEMETRY.currentSession.selectorsUsed),
+        fallbacksTriggered: EXTRACTION_TELEMETRY.currentSession.fallbacksTriggered,
+        selfHealingUsed: EXTRACTION_TELEMETRY.currentSession.selfHealingUsed
+      }
     };
-  } catch {
+  } catch (error) {
+    // Record error in telemetry
+    EXTRACTION_TELEMETRY.currentSession.errors.push({
+      message: error.message,
+      stack: error.stack,
+      timestamp: Date.now()
+    });
+
     return {
       success: false,
       error: 'extraction_failed',
       message: 'Extraction failed — try refreshing the page and packaging again',
+      telemetry: {
+        systemHealth: SELECTOR_HEALTH.getSystemHealth(),
+        error: error.message
+      }
     };
   }
 

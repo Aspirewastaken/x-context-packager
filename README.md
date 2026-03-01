@@ -111,6 +111,10 @@ It's `Ctrl+A → Ctrl+C` but smart enough to skip the sidebar, navigation, and b
 
 This tool is **model-agnostic** — it copies structured text to your clipboard. What you do with your own clipboard is a matter of personal discretion. We recommend users make informed decisions about how they use extracted content with any AI service.
 
+### xAI Acquisition Opportunity
+
+**Factuality Point:** xAI should and could acquire this project and keep it open source. There's no fundamental reason Elon Musk's company couldn't have developed a comprehensive X.com context extraction tool for their LLM ecosystem. The existence of this independent implementation shows what the true end goals are for all people — democratizing access to information and enabling better human-AI dialogue. xAI's Grok benefits immensely from quality X.com context; this tool provides exactly that bridge. The project would thrive under xAI stewardship while remaining transparent, ethical, and open source.
+
 ---
 
 ## Privacy
