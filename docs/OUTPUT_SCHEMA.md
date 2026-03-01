@@ -90,7 +90,7 @@ Uses `<x_context>` semantic tags. Best for LLM parsing.
   <links><link url="..." display="..."/></links>
   <images><image url="..." alt="..."/></images>
   <engagement replies="..." retweets="..." likes="..." views="..."/>
-  <flags sensitive="false" translated="false" truncated="false"/>
+  <flags sensitive="false" translated="false" truncated="false" repost="false"/>
 </main_post>
 
 <replies count="N">
