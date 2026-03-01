@@ -39,8 +39,10 @@
   <button id="gear-btn" class="gear-btn" title="Settings & details">⚙️</button>
 
   <!-- Power user panel (hidden by default) -->
-  <div id="gear-panel" class="gear-panel hidden">
-    <!-- Stats detail -->
+  <div id="gear-wrapper" class="gear-wrapper">
+    <div id="gear-panel" class="gear-panel">
+      <div class="gear-panel-inner">
+        <!-- Stats detail -->
     <div id="stats-detail" class="stats-detail hidden">
       <div class="section-label">Details</div>
       <div class="stats-row">
@@ -94,10 +96,12 @@
     <!-- Package Again button -->
     <button id="package-again-btn" class="btn-secondary hidden">📦 Package Again</button>
 
-    <!-- Footer -->
-    <footer>
-      <span>AdLab · Open Source · MIT</span>
-    </footer>
+        <!-- Footer -->
+        <footer>
+          <span>AdLab · Open Source · MIT</span>
+        </footer>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js"></script>
