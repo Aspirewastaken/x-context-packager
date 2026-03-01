@@ -541,7 +541,6 @@
       healthTracking = true
     } = options;
 
-    // Start with primary selector
     const primarySelector = SELECTORS[selectorKey];
     if (primarySelector) {
       try {
@@ -553,7 +552,7 @@
         }
 
         if (success) {
-          return requireUnique ? elements[0] : elements;
+          return requireUnique ? elements[0] : Array.from(elements);
         }
       } catch (e) {
         if (healthTracking) {
@@ -562,7 +561,6 @@
       }
     }
 
-    // Try fallbacks from SELECTOR_FALLBACKS
     const fallbacks = SELECTOR_FALLBACKS[selectorKey] || [];
     for (const fallback of fallbacks.slice(0, maxAttempts)) {
       try {
@@ -574,7 +572,7 @@
         }
 
         if (success) {
-          return requireUnique ? elements[0] : elements;
+          return requireUnique ? elements[0] : Array.from(elements);
         }
       } catch (e) {
         if (healthTracking) {
@@ -583,7 +581,6 @@
       }
     }
 
-    // If all fallbacks failed, try self-healing detection
     if (expectedContent || !requireUnique) {
       const alternatives = SELF_HEALING_DETECTOR.analyzeDOMForAlternatives(
         selectorKey,
@@ -591,10 +588,10 @@
         expectedContent
       );
 
-      for (const alt of alternatives.slice(0, 3)) { // Try top 3 alternatives
+      for (const alt of alternatives.slice(0, 3)) {
         try {
           const confidence = SELF_HEALING_DETECTOR.testSelector(alt.selector, context);
-          if (confidence >= 0.5) { // Minimum confidence threshold
+          if (confidence >= 0.5) {
             const elements = context.querySelectorAll(alt.selector);
             const success = elements.length > 0 && (!requireUnique || elements.length === 1);
 
@@ -603,7 +600,7 @@
             }
 
             if (success) {
-              return requireUnique ? elements[0] : elements;
+              return requireUnique ? elements[0] : Array.from(elements);
             }
           }
         } catch (e) {
@@ -612,19 +609,14 @@
       }
     }
 
-    return null; // All strategies failed
+    return requireUnique ? null : [];
   }
 
-  /**
-   * Enhanced querySelectorAll with resilience
-   */
   function resilientQuerySelectorAll(context, selectorKey, options = {}) {
-    return resilientQuerySelector(context, selectorKey, { ...options, requireUnique: false });
+    const result = resilientQuerySelector(context, selectorKey, { ...options, requireUnique: false });
+    return Array.isArray(result) ? result : [];
   }
 
-  /**
-   * Enhanced querySelector (single element) with resilience
-   */
   function resilientQuerySelectorSingle(context, selectorKey, options = {}) {
     return resilientQuerySelector(context, selectorKey, { ...options, requireUnique: true });
   }
@@ -798,8 +790,8 @@
           if (svg) {
             const fill = svg.getAttribute('fill') || '';
             const path = qs(svg, 'path');
-            const d = path ? path.getAttribute('d') || '' : '';
-            // Gold badge typically has a different color/fill
+            void (path);
+
             if (fill.includes('D18800') || fill.includes('E8A100') || fill.includes('gold')) {
               tweet.author.verified = 'gold';
             } else if (fill.includes('829AAB') || fill.includes('grey') || fill.includes('gray')) {
@@ -858,8 +850,8 @@
       }
 
       // --- REPLY-TO ---
-      // Look for "Replying to @handle" pattern
-      const replyingTo = resilientQuerySelectorAll(tweetEl, 'replyingTo') || qsa(tweetEl, 'a[href]');
+      const replyingToResult = resilientQuerySelectorAll(tweetEl, 'replyingTo');
+      const replyingTo = replyingToResult.length > 0 ? replyingToResult : qsa(tweetEl, 'a[href]');
       for (const a of replyingTo) {
         const parent = a.parentElement;
         if (parent && /replying to/i.test(parent.textContent || '')) {
@@ -884,7 +876,7 @@
 
       // --- IMAGES ---
       let photoEls = resilientQuerySelectorAll(tweetEl, 'tweetPhoto');
-      if (!photoEls || photoEls.length === 0) {
+      if (photoEls.length === 0) {
         photoEls = qsa(tweetEl, 'img[src*="pbs.twimg.com/media"]');
       } else {
         photoEls = qsa(tweetEl, SELECTORS.tweetPhoto + ' img');
@@ -1740,7 +1732,7 @@
   /**
    * Academic Structure: Formal analysis with citations and sections
    */
-  function formatAcademicStructure(payload, lines, options, analysis) {
+  function formatAcademicStructure(payload, lines, _options, analysis) {
     // Abstract/Overview
     lines.push('## Abstract');
     lines.push(`This analysis examines a social media discussion thread from X.com, containing ${payload.meta.totalTweets} posts with ${payload.meta.totalReplies || 0} reply interactions. The conversation ${analysis.analysis.hasQuestions ? 'explores research questions' : 'discusses topics'} in a ${analysis.analysis.isDebate ? 'debate-oriented' : 'conversational'} manner.`);
@@ -1796,7 +1788,7 @@
   /**
    * Q&A Structure: Question-answer format with threaded discussions
    */
-  function formatQAStructure(payload, lines, options, analysis) {
+  function formatQAStructure(payload, lines, _options, _analysis) {
     if (payload.mainPost) {
       // Check if main post contains questions
       const mainText = payload.mainPost.text || '';
@@ -1834,7 +1826,7 @@
   /**
    * Chat Structure: Conversational log format
    */
-  function formatChatStructure(payload, lines, options, analysis) {
+  function formatChatStructure(payload, lines, _options, _analysis) {
     lines.push('## Conversation Log');
     lines.push('');
 
@@ -1864,7 +1856,7 @@
   /**
    * Technical Structure: Documentation format with code emphasis
    */
-  function formatTechnicalStructure(payload, lines, options, analysis) {
+  function formatTechnicalStructure(payload, lines, _options, _analysis) {
     lines.push('## Technical Discussion');
 
     if (payload.mainPost) {
@@ -1928,7 +1920,7 @@
   /**
    * Narrative Structure: Story-like chronological format
    */
-  function formatNarrativeStructure(payload, lines, options, analysis) {
+  function formatNarrativeStructure(payload, lines, _options, _analysis) {
     lines.push('## The Story');
 
     if (payload.mainPost) {
@@ -1951,7 +1943,7 @@
         return timeA - timeB;
       });
 
-      sortedReplies.forEach((reply, index) => {
+      sortedReplies.forEach((reply) => {
         const character = reply.author?.name || reply.author?.handle || 'Someone';
         const action = reply.threading?.replyTo ? ` replied to ${reply.threading.replyTo}` : ' joined the conversation';
 
@@ -2290,7 +2282,7 @@
     currentSession: {
       startTime: Date.now(),
       pageType: null,
-      selectorsUsed: new Set(),
+      selectorsUsed: [],
       fallbacksTriggered: 0,
       selfHealingUsed: 0,
       extractionQuality: 1.0,
@@ -2346,7 +2338,7 @@
     /**
      * Generate extraction health report
      */
-    generateHealthReport: function(extractedData) {
+    generateHealthReport: function() {
       const report = {
         systemHealth: SELECTOR_HEALTH.getSystemHealth(),
         sessionStats: { ...this.currentSession },
@@ -2407,7 +2399,7 @@
       this.currentSession.extractionQuality = qualityScore;
 
       // Generate and store health report
-      const healthReport = this.generateHealthReport(extractedData);
+      const healthReport = this.generateHealthReport();
 
       try {
         chrome.storage.local.set({
@@ -2427,7 +2419,7 @@
       this.currentSession = {
         startTime: Date.now(),
         pageType: null,
-        selectorsUsed: new Set(),
+        selectorsUsed: [],
         fallbacksTriggered: 0,
         selfHealingUsed: 0,
         extractionQuality: 1.0,
@@ -2443,7 +2435,7 @@
   /**
    * Monitors DOM changes and validates selector health
    */
-  const DOM_CHANGE_MONITOR = {
+  const _DOM_CHANGE_MONITOR = {
     validationInterval: 24 * 60 * 60 * 1000, // 24 hours
     lastValidation: null,
 
@@ -2524,7 +2516,7 @@
   /**
    * Allows community-sourced selector updates and validation
    */
-  const COMMUNITY_CONTRIBUTIONS = {
+  const _COMMUNITY_CONTRIBUTIONS = {
     /**
      * Submit a selector update for community validation
      */
@@ -2587,9 +2579,8 @@
     }
   };
 
-  // Initialize monitoring systems
-  DOM_CHANGE_MONITOR.scheduleValidation();
-  COMMUNITY_CONTRIBUTIONS.validateSubmissions();
+  // Monitoring systems are available but not auto-started.
+  // They activate only when extraction runs to avoid unnecessary work.
 
   // =========================================================================
   // MAIN — Execute extraction and return result
@@ -2629,8 +2620,8 @@
 
     // Generate all three formats from canonical payload
     const structured = formatStructured(payload);
-    const markdown = formatMarkdown(payload);
-    const plain = formatPlain(payload);
+    formatMarkdown(payload);
+    formatPlain(payload);
 
     // Calculate token estimates for the default (structured) format
     const tokens = estimateTokens(structured);
@@ -2671,7 +2662,7 @@
       telemetry: {
         systemHealth: systemHealth,
         extractionQuality: qualityScore,
-        selectorsUsed: Array.from(EXTRACTION_TELEMETRY.currentSession.selectorsUsed),
+        selectorsUsed: EXTRACTION_TELEMETRY.currentSession.selectorsUsed,
         fallbacksTriggered: EXTRACTION_TELEMETRY.currentSession.fallbacksTriggered,
         selfHealingUsed: EXTRACTION_TELEMETRY.currentSession.selfHealingUsed
       }
