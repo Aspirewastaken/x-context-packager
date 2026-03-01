@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=300">
+  <link rel="stylesheet" href="popup.css">
+  <title>X Context Packager</title>
+</head>
+<body>
+  <!-- AdLab Header -->
+  <header id="header">
+    <div class="brand-mark">◆ ADLAB</div>
+    <div class="tool-name">X Context Packager</div>
+  </header>
+
+  <!-- Mode indicator (subtle, only shows on X.com) -->
+  <div id="mode-line" class="mode-line hidden"></div>
+
+  <!-- Status area for errors -->
+  <div id="error-state" class="error-state hidden">
+    <p>Navigate to X.com<br>to package a thread</p>
+  </div>
+
+  <!-- Main action area -->
+  <div id="action-area">
+    <!-- The ONE button -->
+    <button id="package-btn" class="btn-primary">
+      <span id="btn-text">📦 Package</span>
+    </button>
+
+    <!-- Token indicator (shows after extraction) -->
+    <div id="token-indicator" class="token-indicator hidden">
+      <span id="token-dot" class="token-dot"></span>
+      <span id="token-label"></span>
+    </div>
+  </div>
+
+  <!-- Gear icon for power users -->
+  <button id="gear-btn" class="gear-btn" title="Settings & details">⚙️</button>
+
+  <!-- Power user panel (hidden by default) -->
+  <div id="gear-panel" class="gear-panel hidden">
+    <!-- Stats detail -->
+    <div id="stats-detail" class="stats-detail hidden">
+      <div class="section-label">Details</div>
+      <div class="stats-row">
+        <span id="stat-tweets">0 tweets</span> ·
+        <span id="stat-links">0 links</span> ·
+        <span id="stat-images">0 images</span>
+      </div>
+    </div>
+
+    <!-- Format selector -->
+    <div class="section-label">Format</div>
+    <div class="format-selector">
+      <button class="format-btn active" data-format="structured">Structured</button>
+      <button class="format-btn" data-format="markdown">MD</button>
+      <button class="format-btn" data-format="plain">Text</button>
+    </div>
+
+    <!-- Options -->
+    <div class="section-label">Options</div>
+    <div class="options-list">
+      <label class="option-row">
+        <span>Engagement</span>
+        <input type="checkbox" id="opt-engagement" checked>
+      </label>
+      <label class="option-row">
+        <span>Image URLs</span>
+        <input type="checkbox" id="opt-images" checked>
+      </label>
+      <label class="option-row">
+        <span>Timestamps</span>
+        <input type="checkbox" id="opt-timestamps" checked>
+      </label>
+      <label class="option-row">
+        <span>Max replies</span>
+        <select id="opt-max-replies">
+          <option value="all" selected>ALL</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+          <option value="500">500</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- Preview -->
+    <div id="preview-section" class="preview-section hidden">
+      <div class="section-label">Preview</div>
+      <pre id="preview-text" class="preview-text"></pre>
+    </div>
+
+    <!-- Package Again button -->
+    <button id="package-again-btn" class="btn-secondary hidden">📦 Package Again</button>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <span>AdLab · Open Source · MIT</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
