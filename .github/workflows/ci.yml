@@ -32,11 +32,6 @@ jobs:
     - name: Run unit tests
       run: npm test -- --coverage --watchAll=false
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage/lcov.info
-
   manifest-validation:
     runs-on: ubuntu-latest
 
@@ -46,10 +41,8 @@ jobs:
 
     - name: Validate manifest.json
       run: |
-        # Check manifest is valid JSON
         python3 -m json.tool manifest.json > /dev/null
 
-        # Check required fields exist
         python3 -c "
         import json
         with open('manifest.json') as f:
@@ -58,7 +51,7 @@ jobs:
         for field in required:
             assert field in data, f'Missing required field: {field}'
         assert data['manifest_version'] == 3, 'Must be Manifest V3'
-        print('✅ Manifest validation passed')
+        print('Manifest validation passed')
         "
 
   file-structure-check:
@@ -85,19 +78,25 @@ jobs:
 
         for file in "${required_files[@]}"; do
           if [ ! -f "$file" ]; then
-            echo "❌ Missing required file: $file"
+            echo "Missing required file: $file"
             exit 1
           fi
         done
 
-        echo "✅ All required files present"
+        echo "All required files present"
 
     - name: Check icon files exist
       run: |
         icon_files=("icons/icon16.png" "icons/icon48.png" "icons/icon128.png")
+        missing=0
         for icon in "${icon_files[@]}"; do
           if [ ! -f "$icon" ]; then
-            echo "⚠️  Missing icon file: $icon"
-            # Don't fail for missing icons, just warn
+            echo "Missing icon file: $icon"
+            missing=1
           fi
         done
+        if [ $missing -eq 1 ]; then
+          echo "Warning: Some icon files are missing"
+        else
+          echo "All icon files present"
+        fi

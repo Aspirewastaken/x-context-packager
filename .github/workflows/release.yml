@@ -8,6 +8,8 @@ on:
 jobs:
   create-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
@@ -27,50 +29,32 @@ jobs:
 
     - name: Create extension zip
       run: |
-        # Create clean build directory
         mkdir -p build
-        cp -r manifest.json popup content icons docs build/
+        cp manifest.json build/
+        cp -r popup content icons build/
 
-        # Remove development files
-        rm -f build/content/content.js.map 2>/dev/null || true
-
-        # Create zip file
         cd build
         zip -r ../x-context-packager-${{ github.ref_name }}.zip .
 
     - name: Create GitHub release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        files: x-context-packager-${{ github.ref_name }}.zip
+        generate_release_notes: true
         body: |
-          ## Changes
+          ## X Context Packager ${{ github.ref_name }}
 
-          See [CHANGELOG.md](CHANGELOG.md) for detailed changes in this release.
+          See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
 
-          ## Installation
+          ### Installation
 
+          **From this release:**
           1. Download `x-context-packager-${{ github.ref_name }}.zip`
-          2. Open `chrome://extensions`
-          3. Enable Developer Mode
-          4. Drag and drop the zip file to install
+          2. Unzip the file
+          3. Open `chrome://extensions`
+          4. Enable Developer Mode
+          5. Click "Load unpacked" and select the unzipped folder
 
-          ## Verification
-
-          - ✅ All tests pass
-          - ✅ Code validated
-          - ✅ Ready for Chrome Web Store submission
-        draft: false
-        prerelease: false
-
-    - name: Upload release asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./x-context-packager-${{ github.ref_name }}.zip
-        asset_name: x-context-packager-${{ github.ref_name }}.zip
-        asset_content_type: application/zip
+          **From source:**
+          1. Clone this repo
+          2. Open `chrome://extensions` → Enable Developer Mode → Load unpacked → select repo root
