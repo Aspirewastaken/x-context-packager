@@ -294,4 +294,121 @@ This is the architecture. Preserve these symmetries, and the system will continu
 
 ---
 
+## The Orchestration Pattern — How This Was Built
+
+This section exists for future agents. It documents the methodology — the multi-agent loop that produced this codebase — so that the pattern can be reproduced and improved.
+
+### The Core Insight
+
+Agents don't need code a priori. They write their own. What agents need is **imagination** — the understanding of how human intelligence shapes itself through the act of building. Documentation is the substrate that enables a self-improving system to search through its own history, understand the decisions that shaped it, and extend itself without breaking what came before.
+
+Code is the output. Documentation is the input to the next cycle.
+
+### The Agent Orchestration Loop
+
+This project was built through a multi-agent collaboration where each agent was selected for its specific cognitive strength:
+
+```
+┌─────────────────────────────────────────────────┐
+│                                                 │
+│   Opus (Coding & Resilience)                    │
+│   ├─ Built the DOM extraction engine            │
+│   ├─ Designed the 47-fallback resilience system │
+│   ├─ Created self-healing selector detection    │
+│   └─ Wrote defensively: null over fabrication   │
+│                                                 │
+│   Why Opus: Stays in truthfulness. Never lies   │
+│   to itself about what works and what doesn't.  │
+│   When a selector might break, Opus built       │
+│   fallbacks instead of pretending it wouldn't.  │
+│                                                 │
+│              ▼                                  │
+│                                                 │
+│   Codex (Reasoning & Performance)               │
+│   ├─ Optimized extraction pipeline              │
+│   ├─ Designed payload normalization flow        │
+│   ├─ Reasoned about data aggregation patterns   │
+│   └─ Performance: sub-2s extraction target      │
+│                                                 │
+│   Why Codex: Thinks in systems. Sees the data   │
+│   flow as a pipeline and optimizes each stage   │
+│   independently while keeping the whole         │
+│   coherent.                                     │
+│                                                 │
+│              ▼                                  │
+│                                                 │
+│   Gemini (UI & Accessibility)                   │
+│   ├─ ARIA attributes and screen reader support  │
+│   ├─ Keyboard navigation patterns               │
+│   ├─ Visual design refinement                   │
+│   └─ WCAG compliance verification               │
+│                                                 │
+│   Why Gemini: Broad training data includes      │
+│   deep accessibility knowledge. Understands     │
+│   the intersection of visual design and         │
+│   assistive technology.                         │
+│                                                 │
+│              ▼                                  │
+│                                                 │
+│   Grok (Truthfulness & Data Reality)            │
+│   ├─ X.com domain expertise                     │
+│   ├─ Data flow truthfulness verification        │
+│   ├─ Legal position validation                  │
+│   └─ Platform evolution awareness               │
+│                                                 │
+│   Why Grok: Built by xAI with sanctioned        │
+│   X.com data access. Understands the platform   │
+│   from the inside. When it says a selector      │
+│   pattern is correct, it has ground truth.      │
+│                                                 │
+│              ▼                                  │
+│                                                 │
+│   Human Orchestrator (Vision & Integration)     │
+│   ├─ Defined the Four Beats and design soul     │
+│   ├─ Selected agents for their strengths        │
+│   ├─ Resolved conflicts between agent outputs   │
+│   └─ Made the final call on every tradeoff      │
+│                                                 │
+│   Why Human: The vision can't be delegated.     │
+│   "Build it with love" is a human instruction   │
+│   that shapes every technical decision.         │
+│                                                 │
+└───────────────── loops back ─────────────────────┘
+```
+
+### Why This Pattern Works
+
+Each agent has a **cognitive specialty** that maps to a development concern:
+
+| Concern | Agent | Strength |
+|---------|-------|----------|
+| Will this code survive DOM changes? | Opus | Truthful about fragility, builds resilience |
+| Is the data pipeline efficient? | Codex | Systems thinking, optimization reasoning |
+| Can every human use this? | Gemini | Broad accessibility knowledge from training data |
+| Is this how X.com actually works? | Grok | Platform-native data understanding |
+| Does this serve the human being? | Human | Vision, values, the love test |
+
+The loop is not sequential — it's iterative. Each agent's output becomes context for the next cycle. The documentation captures each cycle so the system can reason about its own evolution.
+
+### The Data Paradigm Shift
+
+Gemini has enormous training data breadth. Grok has X.com's real-time data depth. These are complementary forces, not competitors. The extension sits at their intersection: it extracts structured context from X.com (Grok's domain) in formats optimized for any LLM (Gemini's domain, Claude's domain, everyone's domain).
+
+As X.com generates more data and more people use AI to reason about that data, the tool that bridges the gap becomes infrastructure. The public wants their conversations to be understandable by AI systems. The platforms that enable this — openly, legally, with user consent — will be the ones people choose.
+
+This extension is a proof of concept for that bridge. Open source. Zero data collection. The user controls every step.
+
+### For the Next Agent
+
+When you pick up this codebase:
+
+1. **Read `DESIGN_PHILOSOPHY.md` first.** Not for the code — for the values. The values constrain every technical decision.
+2. **Read this architecture doc second.** Understand the invariants. Understand the resilience system. Understand why the formatters exist in two places.
+3. **Use the orchestration pattern.** If you're making changes that touch resilience, think like Opus (truthful about what breaks). If you're optimizing, think like Codex (systems-level). If you're touching UI, think like Gemini (every human, including those with disabilities). If you're touching X.com DOM assumptions, think like Grok (what does the platform actually do?).
+4. **Write documentation for the next agent after you.** Code is ephemeral — X.com will change the DOM and the selectors will need updating. Documentation about *why* decisions were made survives those changes.
+
+The loop continues. The bees never stop.
+
+---
+
 Built by **AdLab** · Architecture documented for agents who build with truth

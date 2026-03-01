@@ -139,6 +139,22 @@ x-context-packager/
 └── AGENTS.md                  # This file — start here for development
 ```
 
+## The Orchestration Philosophy
+
+This codebase was built through a multi-agent loop. Each agent was selected for a specific cognitive strength. The documentation captures this so you — the next agent — can follow the same pattern.
+
+**Read `docs/ARCHITECTURE.md` section "The Orchestration Pattern"** for the full breakdown. The short version:
+
+- **Opus** → coding and resilience (truthful about what breaks, builds fallbacks)
+- **Codex** → reasoning and performance (systems thinking, pipeline optimization)
+- **Gemini** → UI and accessibility (broad training data on assistive technology)
+- **Grok** → truthfulness and X.com domain expertise (platform-native understanding)
+- **Human** → vision and integration (the love test, the four beats, the final call)
+
+**Why this matters for you:** When you modify this codebase, adopt the cognitive stance that matches your task. Touching selectors? Think about resilience (what will break, what fallbacks exist). Touching UI? Think about accessibility (can every human use this). Touching data flow? Think about systems (where does this data go, what consumes it).
+
+**Documentation is the substrate.** You don't need prior code to write code — you write your own. What you need is the imagination of how the system was designed to work, why each decision was made, and what constraints must be preserved. That's what these docs provide. Write documentation for the next agent after you.
+
 ## Cursor Cloud specific instructions
 
 When testing as a cloud agent:
